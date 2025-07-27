@@ -1,0 +1,42 @@
+name,office,district_type,district_number,email,phone,website,social_media,level
+Michelle Wu,Mayor,At-Large,,mayor@boston.gov,(617) 635-4500,boston.gov/mayors-office,,City
+Ruthzee Louijeune,City Councilor,At-Large,,ruthzee.louijeune@boston.gov,(617) 635-4205,boston.gov/city-council-ruthzee-louijeune,,City
+Julia Mejia,City Councilor,At-Large,,julia.mejia@boston.gov,(617) 635-4623,boston.gov/city-council-julia-mejia,,City
+Erin Murphy,City Councilor,At-Large,,erin.murphy@boston.gov,(617) 635-4217,boston.gov/city-council-erin-murphy,,City
+Henry Santana,City Councilor,At-Large,,henry.santana@boston.gov,(617) 635-4309,boston.gov/city-council-henry-santana,,City
+Gabriela Coletta Zapata,City Councilor,District,1,gabriela.coletta@boston.gov,(617) 635-4206,boston.gov/city-council-gabriela-coletta,,City
+Edward Flynn,City Councilor,District,2,ed.flynn@boston.gov,(617) 635-4200,boston.gov/city-council-edward-flynn,,City
+John FitzGerald,City Councilor,District,3,john.fitzgerald@boston.gov,(617) 635-4214,boston.gov/city-council-john-fitzgerald,,City
+Brian Worrell,City Councilor,District,4,brian.worrell@boston.gov,(617) 635-4212,boston.gov/city-council-brian-worrell,,City
+Enrique Pepén,City Councilor,District,5,enrique.pepen@boston.gov,(617) 635-4208,boston.gov/city-council-enrique-pepen,,City
+Benjamin Weber,City Councilor,District,6,benjamin.weber@boston.gov,(617) 635-4220,boston.gov/city-council-benjamin-weber,,City
+Tania Fernandes Anderson,City Councilor,District,7,tania.fernandesanderson@boston.gov,(617) 635-4215,boston.gov/city-council-tania-fernandes-anderson,,City
+Sharon Durkan,City Councilor,District,8,sharon.durkan@boston.gov,(617) 635-4209,boston.gov/city-council-sharon-durkan,,City
+Liz Breadon,City Councilor,District,9,liz.breadon@boston.gov,(617) 635-4210,boston.gov/city-council-liz-breadon,,City
+Nick Collins,State Senator,District,1st Suffolk,Nick.Collins@masenate.gov,(617) 722-1150,malegislature.gov,,State
+Liz Miranda,State Senator,District,2nd Suffolk,Liz.Miranda@masenate.gov,(617) 722-1673,malegislature.gov,,State
+Lydia Edwards,State Senator,District,3rd Suffolk,Lydia.Edwards@masenate.gov,(617) 722-1634,malegislature.gov,,State
+William Brownsberger,State Senator,District,Suffolk & Middlesex,William.Brownsberger@masenate.gov,(617) 722-1280,malegislature.gov,,State
+Michael Rush,State Senator,District,Suffolk & Norfolk,Mike.Rush@masenate.gov,(617) 722-1348,malegislature.gov,,State
+Sal DiDomenico,State Senator,District,Middlesex & Suffolk,Sal.DiDomenico@masenate.gov,(617) 722-1650,malegislature.gov,,State
+Adrian Madaro,State Representative,District,1st Suffolk,Adrian.Madaro@mahouse.gov,(617) 722-2060,malegislature.gov,,State
+Daniel Ryan,State Representative,District,2nd Suffolk,Dan.Ryan@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+Aaron Michlewitz,State Representative,District,3rd Suffolk,Aaron.Michlewitz@mahouse.gov,(617) 722-2990,malegislature.gov,,State
+David Biele,State Representative,District,4th Suffolk,David.Biele@mahouse.gov,(617) 722-2220,malegislature.gov,,State
+Christopher Worrell,State Representative,District,5th Suffolk,Christopher.Worrell@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+Russell Holmes,State Representative,District,6th Suffolk,Russell.Holmes@mahouse.gov,(617) 722-2220,malegislature.gov,,State
+Chynah Tyler,State Representative,District,7th Suffolk,Chynah.Tyler@mahouse.gov,(617) 722-2060,malegislature.gov,,State
+Jay Livingstone,State Representative,District,8th Suffolk,Jay.Livingstone@mahouse.gov,(617) 722-2011,malegislature.gov,,State
+John Moran,State Representative,District,9th Suffolk,John.Moran@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+William MacGregor,State Representative,District,10th Suffolk,Bill.Macgregor@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+Judith Garcia,State Representative,District,11th Suffolk,Judith.Garcia@mahouse.gov,(617) 722-2011,malegislature.gov,,State
+Brandy Fluker Oakley,State Representative,District,12th Suffolk,Brandy.FlukerOakley@mahouse.gov,(617) 722-2430,malegislature.gov,,State
+Daniel Hunt,State Representative,District,13th Suffolk,Daniel.Hunt@mahouse.gov,(617) 722-2380,malegislature.gov,,State
+Rob Consalvo,State Representative,District,14th Suffolk,Rob.Consalvo@mahouse.gov,(617) 722-2030,malegislature.gov,,State
+Samantha Montano,State Representative,District,15th Suffolk,Samantha.Montano@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+Kevin Honan,State Representative,District,17th Suffolk,Kevin.Honan@mahouse.gov,(617) 722-2470,malegislature.gov,,State
+Michael J. Moran,State Representative,District,18th Suffolk,Michael.J.Moran@mahouse.gov,(617) 722-2460,malegislature.gov,,State
+Elizabeth Warren,U.S. Senator,At-Large,,senate.gov/senators/warren,(617) 565-3170,warren.senate.gov,,Federal
+Ed Markey,U.S. Senator,At-Large,,senate.gov/senators/markey,(617) 565-8519,markey.senate.gov,,Federal
+Ayanna Pressley,U.S. Representative,District,7,house.gov/representatives/pressley,(617) 850-0040,pressley.house.gov,,Federal
+Stephen F. Lynch,U.S. Representative,District,8,house.gov/representatives/lynch,(617) 428-2000,stephenlynch.house.gov,,Federal
