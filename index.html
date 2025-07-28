@@ -51,6 +51,45 @@
             font-size: 1.1rem;
         }
 
+        .location-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 15px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .location-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .location-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .location-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .location-status {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 10px;
+        }
+
         .chat-container {
             background: #f8f9fa;
             border-radius: 15px;
@@ -169,6 +208,15 @@
             <p>Ask me about elected officials in Boston!</p>
         </div>
 
+        <div class="location-section">
+            <button class="location-button" id="locationButton" onclick="findMyCouncilor()">
+                📍 Find My City Councilor
+            </button>
+            <div class="location-status" id="locationStatus">
+                Click above to automatically find your district based on your location
+            </div>
+        </div>
+
         <div class="chat-container" id="chatContainer">
             <!-- Chat messages will appear here -->
         </div>
@@ -202,6 +250,93 @@
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
         const loading = document.getElementById('loading');
+        const locationButton = document.getElementById('locationButton');
+        const locationStatus = document.getElementById('locationStatus');
+
+        // Boston district boundaries (approximate center points)
+        const bostonDistricts = {
+            1: { lat: 42.3736, lng: -71.0552, name: "East Boston, Charlestown, North End" },
+            2: { lat: 42.3505, lng: -71.0763, name: "South End, Back Bay, Beacon Hill" },
+            3: { lat: 42.3387, lng: -71.0547, name: "South Boston, Dorchester" },
+            4: { lat: 42.3198, lng: -71.0851, name: "Dorchester" },
+            5: { lat: 42.2844, lng: -71.1281, name: "Roslindale, West Roxbury, Hyde Park" },
+            6: { lat: 42.3142, lng: -71.1097, name: "Jamaica Plain, Mission Hill" },
+            7: { lat: 42.3351, lng: -71.1257, name: "Roxbury" },
+            8: { lat: 42.3251, lng: -71.0898, name: "Roxbury, Mission Hill" },
+            9: { lat: 42.3129, lng: -71.1369, name: "Allston, Brighton" }
+        };
+
+        function getDistrictFromCoordinates(lat, lng) {
+            let closestDistrict = 1;
+            let minDistance = Infinity;
+
+            for (const [district, coords] of Object.entries(bostonDistricts)) {
+                const distance = Math.sqrt(
+                    Math.pow(lat - coords.lat, 2) + Math.pow(lng - coords.lng, 2)
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestDistrict = parseInt(district);
+                }
+            }
+
+            return closestDistrict;
+        }
+
+        async function findMyCouncilor() {
+            if (!navigator.geolocation) {
+                locationStatus.textContent = "Geolocation is not supported by this browser";
+                return;
+            }
+
+            locationButton.disabled = true;
+            locationButton.textContent = "Getting location...";
+            locationStatus.textContent = "Requesting your location...";
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // Check if coordinates are in Boston area (rough bounds)
+                    if (lat < 42.2 || lat > 42.4 || lng < -71.2 || lng > -70.9) {
+                        locationStatus.textContent = "You don't appear to be in Boston. Try asking about a specific neighborhood.";
+                        locationButton.disabled = false;
+                        locationButton.textContent = "📍 Find My City Councilor";
+                        return;
+                    }
+
+                    const district = getDistrictFromCoordinates(lat, lng);
+                    const districtInfo = bostonDistricts[district];
+                    
+                    locationStatus.textContent = `Found you in District ${district} (${districtInfo.name})`;
+                    
+                    // Automatically ask about the user's district
+                    userInput.value = `Who is the city councilor for district ${district}?`;
+                    await sendMessage();
+                    
+                    locationButton.disabled = false;
+                    locationButton.textContent = "📍 Find My City Councilor";
+                },
+                (error) => {
+                    let errorMessage = "Unable to get your location";
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = "Location access denied. Please enable location permissions.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = "Location information unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = "Location request timed out.";
+                            break;
+                    }
+                    locationStatus.textContent = errorMessage;
+                    locationButton.disabled = false;
+                    locationButton.textContent = "📍 Find My City Councilor";
+                }
+            );
+        }
 
         function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
@@ -273,7 +408,7 @@
 
         // Add a welcome message
         setTimeout(() => {
-            addMessage("Hello! I'm your Boston Civic AI Assistant. I can help you find information about elected officials in Boston. Try asking me about the mayor, city councilors, or any specific official you'd like to know about!");
+            addMessage("Hello! I'm your Boston Civic AI Assistant. I can help you find information about elected officials in Boston. Try clicking 'Find My City Councilor' to automatically find your representative, or ask me about any Boston official!");
         }, 500);
     </script>
 </body>
