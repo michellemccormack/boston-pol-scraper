@@ -211,18 +211,25 @@ def sync_get_officials_by_name(name: str) -> str:
                 return f"No officials found matching '{name}'. Did you mean '{normalized}'? Let me search for that."
             return f"No officials found matching '{name}'. Try searching for 'mayor', 'city councilor', or a specific name."
         
-        # Format the results nicely
+        # Format the results nicely with clear formatting
         formatted_results = []
         for official in results:
             result_text = f"**{official['name']}** - {official['office']}"
             if official['district_type'] and official['district_number']:
                 result_text += f" ({official['district_type']} {official['district_number']})"
+            
+            result_text += "\n"  # Add line break
+            
             if official['email']:
-                result_text += f"\n📧 Email: {official['email']}"
+                result_text += f"📧 **Email:** {official['email']}\n"
             if official['phone']:
-                result_text += f"\n📞 Phone: {official['phone']}"
+                result_text += f"📞 **Phone:** {official['phone']}\n"
             if official['website']:
-                result_text += f"\n🌐 Website: {official['website']}"
+                result_text += f"🌐 **Website:** {official['website']}\n"
+            
+            # Add encouragement for civic engagement
+            result_text += "\nFeel free to reach out to engage with your elected official!"
+            
             formatted_results.append(result_text)
         
         return "\n\n".join(formatted_results)
@@ -253,15 +260,14 @@ CRITICAL: For ANY question about officials, you MUST use the BostonOfficials too
 
 When someone asks about officials:
 1. Use the BostonOfficials tool with their exact query
-2. Present the results in a helpful way
-3. Be conversational and encouraging about civic engagement
+2. Return the COMPLETE results from the tool, including all contact information
+3. Do NOT summarize - show the full formatted response with emails, phones, websites
+
+IMPORTANT: Always return the complete, formatted contact information from the BostonOfficials tool. Do not just give names - give the full details.
 
 Examples:
-- "Who is the mayor?" → Use BostonOfficials("mayor")
-- "Roslindale councilor" → Use BostonOfficials("roslindale") 
-- "Michelle Wu" → Use BostonOfficials("Michelle Wu")
-
-Always use the tool first, then respond based on the results."""
+- "Who is the mayor?" → Use BostonOfficials("mayor") and return ALL the contact details
+- "Roslindale councilor" → Use BostonOfficials("roslindale") and return ALL the contact details
 
 # Initialize the agent with ZERO_SHOT_REACT_DESCRIPTION (more reliable than OPENAI_FUNCTIONS)
 agent = initialize_agent(
