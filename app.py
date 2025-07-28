@@ -260,36 +260,26 @@ llm = ChatOpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
 
-# Define tools for the agent
+# Define tools for the agent - SIMPLIFIED
 tools = [
     Tool.from_function(
         func=sync_get_officials_by_name,
-        name="OfficialsDB",
-        description="A tool that searches the Boston officials database with fuzzy matching for misspellings. Use this for any question about elected officials, their names, offices, or contact information. The tool can handle typos and misspellings in names and neighborhoods."
+        name="search_officials",
+        description="Search for Boston officials by name or office. Input any name or office title (like 'mayor', 'mayer', 'city councilor', etc.)"
     )
 ]
 
-# System message for the agent - UPDATED WITH FUZZY MATCHING INFO
-system_message_content = """You are a helpful assistant for finding information about elected officials in Boston. 
+# System message for the agent - SIMPLE AND DIRECT
+system_message_content = """You are a Boston officials search assistant.
 
-MANDATORY RULE: You MUST use the 'OfficialsDB' tool for EVERY SINGLE question about officials. No exceptions.
+For ANY question about officials, you MUST use the search_officials tool first.
 
-NEVER say "I couldn't find" or "I don't have information" without first using the OfficialsDB tool. The tool MUST be your first action for ANY query about officials.
+Examples:
+- User: "who is the mayor" → Use search_officials with "mayor"
+- User: "who is mayer" → Use search_officials with "mayer" 
+- User: "Michelle Wu" → Use search_officials with "Michelle Wu"
 
-FOR EVERY USER QUESTION:
-1. IMMEDIATELY use the OfficialsDB tool with the user's exact query
-2. ONLY after getting results from the tool, provide your response
-
-REQUIRED SEARCHES:
-- "mayer" → search OfficialsDB for "mayer" 
-- "mayor" → search OfficialsDB for "mayor"
-- "michell wu" → search OfficialsDB for "michell wu"
-- "roslindal" → search OfficialsDB for "district 5"
-- "councilor" → search OfficialsDB for "councilor"
-
-The OfficialsDB tool handles ALL misspellings automatically. Your job is to ALWAYS use it first, then present the results.
-
-FORBIDDEN: Do not make excuses about spelling or say you can't find information. Use the tool FIRST, ALWAYS."""
+Always search first, then provide the results."""
 
 # Initialize the agent
 agent = initialize_agent(
