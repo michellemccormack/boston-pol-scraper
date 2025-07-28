@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from typing import List, Dict
 from dotenv import load_dotenv
+from difflib import SequenceMatcher
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,6 +29,67 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Fuzzy matching helper function
+def fuzzy_match(text1, text2, threshold=0.6):
+    """Check if two strings are similar enough (handles typos)"""
+    return SequenceMatcher(None, text1.lower(), text2.lower()).ratio() >= threshold
+
+def find_closest_match(search_term, candidates, threshold=0.6):
+    """Find the closest matching string from a list of candidates"""
+    best_match = None
+    best_ratio = 0
+    
+    for candidate in candidates:
+        ratio = SequenceMatcher(None, search_term.lower(), candidate.lower()).ratio()
+        if ratio > best_ratio and ratio >= threshold:
+            best_ratio = ratio
+            best_match = candidate
+    
+    return best_match
+
+# Common misspellings and variations
+NEIGHBORHOOD_VARIATIONS = {
+    'roslindale': ['roslindale', 'roslindal', 'roslindale', 'roslindail'],
+    'jamaica plain': ['jamaica plain', 'jamaca plain', 'jamaicaplain', 'jp'],
+    'south end': ['south end', 'southend', 'south-end'],
+    'back bay': ['back bay', 'backbay', 'back-bay'],
+    'charlestown': ['charlestown', 'charleston', 'charestown'],
+    'east boston': ['east boston', 'eastboston', 'east-boston', 'eastie'],
+    'north end': ['north end', 'northend', 'north-end'],
+    'allston': ['allston', 'alston', 'alliston'],
+    'brighton': ['brighton', 'britton', 'bryton'],
+    'roxbury': ['roxbury', 'roxbery', 'roxburry'],
+    'dorchester': ['dorchester', 'dorchestor', 'dorchster', 'dot'],
+    'west roxbury': ['west roxbury', 'westroxbury', 'west-roxbury'],
+    'hyde park': ['hyde park', 'hydepark', 'hyde-park'],
+    'mission hill': ['mission hill', 'missionhill', 'mission-hill']
+}
+
+OFFICE_VARIATIONS = {
+    'mayor': ['mayor', 'mayer', 'major'],
+    'city councilor': ['city councilor', 'city councilman', 'councilor', 'councilman', 'council member'],
+    'state senator': ['state senator', 'senator', 'state senate'],
+    'state representative': ['state representative', 'state rep', 'representative', 'rep']
+}
+
+def normalize_search_term(search_term):
+    """Normalize search term by checking for common variations and misspellings"""
+    search_lower = search_term.lower().strip()
+    
+    # Check neighborhood variations
+    for standard_name, variations in NEIGHBORHOOD_VARIATIONS.items():
+        for variation in variations:
+            if fuzzy_match(search_lower, variation, 0.8):
+                return standard_name
+    
+    # Check office variations
+    for standard_office, variations in OFFICE_VARIATIONS.items():
+        for variation in variations:
+            if fuzzy_match(search_lower, variation, 0.8):
+                return standard_office
+    
+    return search_term
 
 # Database initialization
 async def init_database():
@@ -72,18 +134,21 @@ async def init_database():
             else:
                 print("Warning: officials.csv not found")
 
-# IMPROVED Database search function
+# IMPROVED Database search function with fuzzy matching
 async def get_officials_by_name(name: str) -> List[Dict]:
     """
     Searches the database for an elected official by their name or office.
-    Now with smarter district-specific searching.
+    Now with fuzzy matching for misspellings and typos.
     """
     async with aiosqlite.connect(DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.cursor()
         
+        # Normalize the search term first
+        normalized_name = normalize_search_term(name)
+        
         # Check if this is a district-specific search
-        district_match = re.search(r'district\s+(\d+)', name.lower())
+        district_match = re.search(r'district\s+(\d+)', normalized_name.lower())
         
         if district_match:
             # This is a district search - be very specific
@@ -94,11 +159,15 @@ async def get_officials_by_name(name: str) -> List[Dict]:
             """
             await cursor.execute(query, (district_num,))
         else:
-            # General search - but be more precise
-            search_term = f"%{name.lower()}%"
+            # Get all officials for fuzzy matching
+            await cursor.execute("SELECT * FROM officials")
+            all_officials = await cursor.fetchall()
+            
+            # First try exact/close matches
+            search_term = f"%{normalized_name.lower()}%"
             
             # If searching for "city councilor" generally, get at-large councilors
-            if "city councilor" in name.lower() and "district" not in name.lower():
+            if "city councilor" in normalized_name.lower() and "district" not in normalized_name.lower():
                 query = """
                     SELECT * FROM officials 
                     WHERE lower(office) LIKE '%city councilor%' 
@@ -107,7 +176,7 @@ async def get_officials_by_name(name: str) -> List[Dict]:
                 """
                 await cursor.execute(query)
             else:
-                # Search by name, specific office, or level
+                # Try regular search first
                 query = """
                     SELECT * FROM officials 
                     WHERE lower(name) LIKE ? 
@@ -115,6 +184,21 @@ async def get_officials_by_name(name: str) -> List[Dict]:
                     OR lower(level) LIKE ?
                 """
                 await cursor.execute(query, (search_term, search_term, search_term))
+                
+                results = await cursor.fetchall()
+                
+                # If no results, try fuzzy matching on names
+                if not results:
+                    fuzzy_matches = []
+                    for official in all_officials:
+                        # Check name similarity
+                        if fuzzy_match(normalized_name, official['name'], 0.6):
+                            fuzzy_matches.append(dict(official))
+                        # Check office similarity  
+                        elif fuzzy_match(normalized_name, official['office'], 0.7):
+                            fuzzy_matches.append(dict(official))
+                    
+                    return fuzzy_matches
         
         results = await cursor.fetchall()
         return [dict(row) for row in results]
@@ -141,7 +225,11 @@ def sync_get_officials_by_name(name: str) -> str:
             results = loop.run_until_complete(get_officials_by_name(name))
         
         if not results:
-            return f"No officials found matching '{name}'. Try searching for a different name or office."
+            # Try to suggest similar terms
+            normalized = normalize_search_term(name)
+            if normalized != name:
+                return f"No officials found matching '{name}'. Did you mean '{normalized}'? Try searching for that instead."
+            return f"No officials found matching '{name}'. Try searching for a different name, office, or check your spelling."
         
         # Format the results nicely
         formatted_results = []
@@ -174,26 +262,33 @@ tools = [
     Tool.from_function(
         func=sync_get_officials_by_name,
         name="OfficialsDB",
-        description="A tool that searches the Boston officials database. Use this for any question about elected officials, their names, offices, or contact information. For district searches, use format 'district 5' to find the specific district councilor."
+        description="A tool that searches the Boston officials database with fuzzy matching for misspellings. Use this for any question about elected officials, their names, offices, or contact information. The tool can handle typos and misspellings in names and neighborhoods."
     )
 ]
 
-# System message for the agent - UPDATED WITH BETTER INSTRUCTIONS
+# System message for the agent - UPDATED WITH FUZZY MATCHING INFO
 system_message_content = """You are a helpful assistant for finding information about elected officials in Boston. 
 
-Always use the 'OfficialsDB' tool to search for information. When users ask about:
-- A specific person's name (e.g., "Michelle Wu") - search for that name
-- An office or position (e.g., "mayor", "state senator") - search for that office
-- A specific district (e.g., "district 1") - search for "district 1" exactly
-- A neighborhood - automatically search for the corresponding district:
-  * Roslindale → search for "district 5"
-  * Jamaica Plain → search for "district 6" 
-  * South End or Back Bay → search for "district 2"
-  * Charlestown → search for "district 1"
-  * East Boston → search for "district 1"
-  * North End → search for "district 1"
+Always use the 'OfficialsDB' tool to search for information. The search tool can handle misspellings and typos, so don't worry if the user's spelling isn't perfect.
 
-IMPORTANT: When someone asks about a neighborhood like Roslindale, immediately search for the corresponding district number (e.g., "district 5" for Roslindale). Do not search for the neighborhood name directly.
+When users ask about:
+- A specific person's name (e.g., "Michelle Wu", "michell wu", "michele wu") - search for that name
+- An office or position (e.g., "mayor", "mayer", "major") - search for that office
+- A specific district (e.g., "district 1") - search for "district 1" exactly
+- A neighborhood (even with typos) - automatically search for the corresponding district:
+  * Roslindale/Roslindal → search for "district 5"
+  * Jamaica Plain/Jamaca Plain/JP → search for "district 6" 
+  * South End/Southend or Back Bay/Backbay → search for "district 2"
+  * Charlestown/Charleston → search for "district 1"
+  * East Boston/Eastboston/Eastie → search for "district 1"
+  * North End/Northend → search for "district 1"
+  * Allston/Alston or Brighton/Britton → search for "district 9"
+  * Roxbury/Roxbery → search for "district 7"
+  * Dorchester/Dot → search for "district 3" or "district 4"
+
+The search function can handle common misspellings automatically. If someone asks about a neighborhood with typos, still search for the corresponding district.
+
+IMPORTANT: When someone asks about a neighborhood (even misspelled), immediately search for the corresponding district number. 
 
 If you find multiple results, present them clearly. Always format contact information clearly and encourage civic engagement."""
 
