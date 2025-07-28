@@ -4,299 +4,277 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Boston Civic AI Assistant</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+        * {
             margin: 0;
-            padding: 20px;
+            padding: 0;
             box-sizing: border-box;
         }
-        .chat-container {
-            background-color: #ffffff;
-            border-radius: 1.5rem; /* Rounded corners */
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            width: 100%;
-            max-width: 600px;
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            height: 80vh;
-            max-height: 800px;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
-        .chat-header {
-            background: linear-gradient(to right, #4a00e0, #8e2de2);
-            color: white;
-            padding: 1.5rem;
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
             text-align: center;
-            border-top-left-radius: 1.5rem;
-            border-top-right-radius: 1.5rem;
+            margin-bottom: 40px;
         }
-        .messages {
-            flex-grow: 1;
-            padding: 1.5rem;
+
+        .header h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .chat-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
-            background-color: #f9fafb;
+            border: 1px solid #e9ecef;
         }
-        .message-bubble {
+
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
             max-width: 80%;
-            padding: 0.75rem 1rem;
-            border-radius: 1rem;
-            margin-bottom: 0.75rem;
-            word-wrap: break-word;
         }
+
         .user-message {
-            background-color: #6366f1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             margin-left: auto;
-            border-bottom-right-radius: 0.25rem;
         }
-        .ai-message {
-            background-color: #e0e7ff;
-            color: #312e81;
+
+        .assistant-message {
+            background: #e9ecef;
+            color: #333;
             margin-right: auto;
-            border-bottom-left-radius: 0.25rem;
         }
-        .chat-input-area {
+
+        .input-container {
             display: flex;
-            padding: 1rem;
-            background-color: #ffffff;
-            border-top: 1px solid #e5e7eb;
-            border-bottom-left-radius: 1.5rem;
-            border-bottom-right-radius: 1.5rem;
+            gap: 10px;
+            align-items: center;
         }
-        .chat-input {
-            flex-grow: 1;
-            border: 1px solid #d1d5db;
-            border-radius: 0.75rem;
-            padding: 0.75rem 1rem;
-            margin-right: 0.75rem;
+
+        .input-field {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
             font-size: 1rem;
             outline: none;
+            transition: border-color 0.3s ease;
         }
-        .chat-send-btn {
-            background-color: #6366f1;
+
+        .input-field:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.75rem;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s;
-            border: none;
-            outline: none;
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
         }
-        .chat-send-btn:hover {
-            background-color: #4f46e5;
+
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
-        /* Responsive adjustments */
-        @media (max-width: 640px) {
-            .chat-container {
-                height: 95vh;
-                border-radius: 0.5rem;
-                max-height: 95vh;
-            }
-            .chat-header {
-                border-top-left-radius: 0.5rem;
-                border-top-right-radius: 0.5rem;
-                padding: 1rem;
-            }
-            .messages {
-                padding: 1rem;
-            }
-            .chat-input-area {
-                padding: 0.75rem;
-                border-bottom-left-radius: 0.5rem;
-                border-bottom-right-radius: 0.5rem;
-            }
-            .chat-input {
-                padding: 0.6rem 0.8rem;
-                margin-right: 0.5rem;
-            }
-            .chat-send-btn {
-                padding: 0.6rem 1rem;
-            }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
-        /* Dot Pulse animation styles */
-        .dot-pulse {
-            position: relative;
-            left: -9999px;
-            width: 10px;
-            height: 10px;
-            border-radius: 5px;
-            background-color: #4f46e5;
-            color: #4f46e5; /* Fallback for browsers not supporting background-color for text-shadow */
-            box-shadow: 9999px 0 0 -5px;
-            animation: dotPulse 1.5s infinite linear;
-            animation-delay: .25s;
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin: 10px 0;
         }
-        .dot-pulse::before, .dot-pulse::after {
-            content: '';
+
+        .example-questions {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .example-questions h3 {
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .example-button {
             display: inline-block;
-            position: absolute;
-            top: 0;
-            width: 10px;
-            height: 10px;
-            border-radius: 5px;
-            background-color: #4f46e5;
-            color: #4f46e5;
+            margin: 5px;
+            padding: 8px 15px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
         }
-        .dot-pulse::before {
-            box-shadow: 9984px 0 0 -5px;
-            animation: dotPulseBefore 1.5s infinite linear;
-            animation-delay: 0s;
-        }
-        .dot-pulse::after {
-            box-shadow: 10014px 0 0 -5px;
-            animation: dotPulseAfter 1.5s infinite linear;
-            animation-delay: .5s;
-        }
-        @keyframes dotPulseBefore {
-            0% { box-shadow: 9984px 0 0 -5px; }
-            30% { box-shadow: 9984px 0 0 2px; }
-            60%, 100% { box-shadow: 9984px 0 0 -5px; }
-        }
-        @keyframes dotPulse {
-            0% { box-shadow: 9999px 0 0 -5px; }
-            30% { box-shadow: 9999px 0 0 2px; }
-            60%, 100% { box-shadow: 9999px 0 0 -5px; }
-        }
-        @keyframes dotPulseAfter {
-            0% { box-shadow: 10014px 0 0 -5px; }
-            30% { box-shadow: 10014px 0 0 2px; }
-            60%, 100% { box-shadow: 10014px 0 0 -5px; }
+
+        .example-button:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: translateY(-1px);
         }
     </style>
 </head>
 <body>
-    <div id="root" class="chat-container"></div>
+    <div class="container">
+        <div class="header">
+            <h1>Boston Civic AI Assistant</h1>
+            <p>Ask me about elected officials in Boston!</p>
+        </div>
 
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <div class="chat-container" id="chatContainer">
+            <!-- Chat messages will appear here -->
+        </div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        <div class="loading" id="loading">
+            🤔 Thinking...
+        </div>
 
-        // ** API_BASE_URL is now an empty string. It will use the same origin as the page. **
-        const API_BASE_URL = ''; 
+        <div class="input-container">
+            <input 
+                type="text" 
+                class="input-field" 
+                id="userInput" 
+                placeholder="Type your question..."
+                autocomplete="off"
+            />
+            <button class="send-button" id="sendButton">Send</button>
+        </div>
 
-        function App() {
-            const [messages, setMessages] = useState([]);
-            const [input, setInput] = useState('');
-            const [isLoading, setIsLoading] = useState(false);
-            const messagesEndRef = useRef(null);
+        <div class="example-questions">
+            <h3>Try asking:</h3>
+            <span class="example-button" onclick="askQuestion('Who is the mayor of Boston?')">Who is the mayor?</span>
+            <span class="example-button" onclick="askQuestion('Find city councilors')">City councilors</span>
+            <span class="example-button" onclick="askQuestion('Show me district 1 officials')">District 1 officials</span>
+            <span class="example-button" onclick="askQuestion('Michelle Wu contact info')">Michelle Wu contact</span>
+        </div>
+    </div>
 
-            const scrollToBottom = () => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            };
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const loading = document.getElementById('loading');
 
-            useEffect(() => {
-                scrollToBottom();
-            }, [messages]);
-
-            const sendMessage = async () => {
-                if (input.trim() === '') return;
-
-                const userMessage = { text: input, sender: 'user' };
-                setMessages((prevMessages) => [...prevMessages, userMessage]);
-                setInput('');
-                setIsLoading(true);
-
-                try {
-                    // Use relative path for API call. Will always be on same server/port.
-                    const response = await fetch(`/ask/`, { 
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ query: input }),
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    setMessages((prevMessages) => [
-                        ...prevMessages,
-                        { text: data.response, sender: 'ai' },
-                    ]);
-                } catch (error) {
-                    console.error("Error sending message:", error);
-                    setMessages((prevMessages) => [
-                        ...prevMessages,
-                        { text: `Error: Failed to fetch. Please try again. (${error.message})`, sender: 'ai' },
-                    ]);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-
-            const handleKeyPress = (e) => {
-                if (e.key === 'Enter' && !isLoading) {
-                    sendMessage();
-                }
-            };
-
-            return (
-                <div className="flex flex-col h-full">
-                    <div className="chat-header">
-                        <h1 className="text-2xl font-bold">Boston Civic AI Assistant</h1>
-                        <p className="text-sm opacity-90 mt-1">Ask me about elected officials in Boston!</p>
-                    </div>
-                    <div className="messages">
-                        {messages.length === 0 && !isLoading && (
-                            <div className="text-gray-500 text-center py-4">
-                                Type a question to get started!
-                            </div>
-                        )}
-                        {messages.map((msg, index) => (
-                            <div
-                                key={index}
-                                className={`message-bubble ${msg.sender === 'user' ? 'user-message' : 'ai-message'}`}
-                            >
-                                {msg.text}
-                            </div>
-                        ))}
-                        {isLoading && (
-                            <div className="message-bubble ai-message">
-                                <div className="dot-pulse"></div>
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-                    <div className="chat-input-area">
-                        <input
-                            type="text"
-                            className="chat-input"
-                            placeholder={isLoading ? "Thinking..." : "Type your question..."}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            disabled={isLoading}
-                        />
-                        <button
-                            className="chat-send-btn"
-                            onClick={sendMessage}
-                            disabled={isLoading}
-                        >
-                            Send
-                        </button>
-                    </div>
-                </div>
-            );
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+            
+            // Format the content to handle markdown-style formatting
+            const formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+            
+            messageDiv.innerHTML = formattedContent;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // --- CRUCIAL FIX: Use ReactDOM.createRoot().render() for React 18 ---
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            // Add user message
+            addMessage(message, true);
+            userInput.value = '';
+            
+            // Show loading
+            loading.style.display = 'block';
+            sendButton.disabled = true;
+
+            try {
+                const response = await fetch('/ask/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: message })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage(data.response);
+                } else {
+                    addMessage(`Sorry, I encountered an error: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('Sorry, I had trouble connecting to the server. Please try again.');
+                console.error('Error:', error);
+            } finally {
+                loading.style.display = 'none';
+                sendButton.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        function askQuestion(question) {
+            userInput.value = question;
+            sendMessage();
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Focus on input when page loads
+        userInput.focus();
+
+        // Add a welcome message
+        setTimeout(() => {
+            addMessage("Hello! I'm your Boston Civic AI Assistant. I can help you find information about elected officials in Boston. Try asking me about the mayor, city councilors, or any specific official you'd like to know about!");
+        }, 500);
     </script>
 </body>
 </html>

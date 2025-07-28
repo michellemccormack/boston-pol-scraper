@@ -1,107 +1,216 @@
 import aiosqlite
-from fastapi import FastAPI
+import csv
+import os
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from langchain.agents import initialize_agent, AgentType, Tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
-import os
-from fastapi.middleware.cors import CORSMiddleware # New Import
+from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+from typing import List, Dict
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Define the path to your database file
 DATABASE_URL = "officials.db"
 
 app = FastAPI()
 
-# NEW: Add CORS middleware to allow cross-origin requests from your frontend
-origins = [
-    "http://localhost", # For local development
-    "http://127.0.0.1", # For local development
-    "file://", # For opening index.html directly in browser
-    "null", # Some browsers (like Chrome) use 'null' origin for local files
-]
-
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins, you can restrict this later
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Your database search function is now a "tool" for the AI.
-async def get_officials_by_name(name: str):
+# Database initialization
+async def init_database():
+    """Initialize the database and populate it with data from CSV if it doesn't exist."""
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        # Create the officials table
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS officials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                office TEXT NOT NULL,
+                district_type TEXT,
+                district_number TEXT,
+                email TEXT,
+                phone TEXT,
+                website TEXT,
+                social_media TEXT,
+                level TEXT
+            )
+        ''')
+        
+        # Check if table is empty
+        cursor = await db.execute("SELECT COUNT(*) FROM officials")
+        count = await cursor.fetchone()
+        
+        if count[0] == 0:
+            # Populate from CSV file
+            if os.path.exists('officials.csv'):
+                with open('officials.csv', 'r', newline='', encoding='utf-8') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        await db.execute('''
+                            INSERT INTO officials (name, office, district_type, district_number, email, phone, website, social_media, level)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            row['name'], row['office'], row['district_type'], 
+                            row['district_number'], row['email'], row['phone'], 
+                            row['website'], row['social_media'], row['level']
+                        ))
+                await db.commit()
+                print("Database populated with officials data")
+            else:
+                print("Warning: officials.csv not found")
+
+# Database search function
+async def get_officials_by_name(name: str) -> List[Dict]:
     """
-    Searches the database for an elected official by their name.
+    Searches the database for an elected official by their name or office.
     """
     async with aiosqlite.connect(DATABASE_URL) as db:
-        db.row_factory = aiosqlite.Row  # This makes rows act like dictionaries
+        db.row_factory = aiosqlite.Row
         cursor = await db.cursor()
         
-        # SQL query to find officials with a similar name
-        # We will search broadly across name and office to catch more matches
-        query = "SELECT * FROM officials WHERE lower(name) LIKE ? OR lower(Office) LIKE ?;"
-        await cursor.execute(query, (f"%{name.lower()}%", f"%{name.lower()}%"))
+        # Search broadly across name and office
+        query = """
+            SELECT * FROM officials 
+            WHERE lower(name) LIKE ? 
+            OR lower(office) LIKE ? 
+            OR lower(district_type) LIKE ?
+            OR lower(level) LIKE ?
+        """
+        search_term = f"%{name.lower()}%"
+        await cursor.execute(query, (search_term, search_term, search_term, search_term))
         
         results = await cursor.fetchall()
-        
         return [dict(row) for row in results]
 
+# Synchronous wrapper for the async function (needed for LangChain)
+def sync_get_officials_by_name(name: str) -> str:
+    """Synchronous wrapper for the async database function."""
+    try:
+        # Get the current event loop or create a new one
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Run the async function
+        if loop.is_running():
+            # If we're already in an async context, we need to handle this differently
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, get_officials_by_name(name))
+                results = future.result()
+        else:
+            results = loop.run_until_complete(get_officials_by_name(name))
+        
+        if not results:
+            return f"No officials found matching '{name}'. Try searching for a different name or office."
+        
+        # Format the results nicely
+        formatted_results = []
+        for official in results:
+            result_text = f"**{official['name']}** - {official['office']}"
+            if official['district_type'] and official['district_number']:
+                result_text += f" ({official['district_type']} {official['district_number']})"
+            if official['email']:
+                result_text += f"\n📧 Email: {official['email']}"
+            if official['phone']:
+                result_text += f"\n📞 Phone: {official['phone']}"
+            if official['website']:
+                result_text += f"\n🌐 Website: {official['website']}"
+            formatted_results.append(result_text)
+        
+        return "\n\n".join(formatted_results)
+    
+    except Exception as e:
+        return f"Error searching for officials: {str(e)}"
+
 # Create the LangChain Agent
-# --- API KEY IS DIRECTLY INCLUDED IN THIS LINE ---
 llm = ChatOpenAI(
     temperature=0, 
     model="gpt-3.5-turbo", 
     api_key=os.environ.get("OPENAI_API_KEY")
+)  # Fixed: Added missing closing parenthesis
 
-# The Tool definition now explicitly handles the async nature of get_officials_by_name
+# Define tools for the agent
 tools = [
     Tool.from_function(
-        func=get_officials_by_name,
+        func=sync_get_officials_by_name,
         name="OfficialsDB",
-        description="A tool that searches the Boston officials database. Use this for any question that asks about an elected official's name, office, or contact information. The input should be the full or partial name of the official, or the office they hold (e.g., 'mayor').",
-        coroutine=get_officials_by_name # Explicitly tell LangChain it's a coroutine
+        description="A tool that searches the Boston officials database. Use this for any question about elected officials, their names, offices, or contact information. Input should be the name of the official or the office they hold (e.g., 'mayor', 'city councilor', 'state senator')."
     )
 ]
 
-# We will provide a specific system message to guide the AI's reasoning
-# --- FIX: Passed as system_message within agent_kwargs ---
-system_message_content = "You are a helpful assistant for finding information about elected officials in Boston. Always use the 'OfficialsDB' tool to search for information. If the user asks about an office (like 'mayor' or 'city councilor'), try searching for that office. If they ask about a name, search for that name. If you find multiple results, list them clearly."
+# System message for the agent
+system_message_content = """You are a helpful assistant for finding information about elected officials in Boston. 
 
+Always use the 'OfficialsDB' tool to search for information. When users ask about:
+- A specific person's name (e.g., "Michelle Wu") - search for that name
+- An office or position (e.g., "mayor", "city councilor") - search for that office
+- A district (e.g., "district 1") - search for that district
+
+If you find multiple results, present them clearly. If you find no results, suggest alternative search terms or ask the user to be more specific.
+
+Always format contact information clearly and encourage civic engagement."""
+
+# Initialize the agent
 agent = initialize_agent(
     tools, 
     llm, 
     agent=AgentType.OPENAI_FUNCTIONS, 
     verbose=True,
-    handle_parsing_errors=True, # Added to catch potential parsing issues
-    agent_kwargs={"system_message": system_message_content} # Pass the custom prompt
+    handle_parsing_errors=True,
+    agent_kwargs={"system_message": system_message_content}
 )
 
-# Pydantic model for the POST request body
+# Pydantic model for requests
 class QueryModel(BaseModel):
     query: str
 
-@app.get("/")
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the database when the app starts."""
+    await init_database()
+
+@app.get("/", response_class=HTMLResponse)
 async def read_root():
-    """
-    Root endpoint for the API. Returns a welcome message.
-    """
-    return {"message": "Welcome to the AI Political Scraper API!"}
+    """Serve the main HTML interface."""
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse("<h1>Error: index.html not found</h1>", status_code=404)
 
 @app.post("/ask/")
 async def ask_agent(query_model: QueryModel):
     """
     Endpoint to send natural language queries to the AI agent.
-    The agent uses its tools to find and return relevant information.
     """
-    # Print the received query to the terminal for debugging.
     print(f"Received query: {query_model.query}")
+    
     try:
-        # --- CRUCIAL FIX: AWAITING THE ASYNCHRONOUS AGENT RUN ---
-        response = await agent.arun(query_model.query) 
-        # Print the agent's final response to the terminal.
+        # Run the agent synchronously (LangChain agents are not natively async)
+        response = agent.run(query_model.query)  # Changed from arun to run
         print(f"Agent response: {response}")
         return {"response": response}
+    
     except Exception as e:
-        # If an error occurs, print it to the terminal and return a 500 error.
         print(f"Error during agent execution: {e}")
-        return {"error": str(e)}, 500
+        raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
