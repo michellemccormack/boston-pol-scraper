@@ -123,9 +123,7 @@ def normalize_search_term(search_term):
 
 # IMPROVED Database search function with fuzzy matching
 async def get_officials_by_name(name: str) -> List[Dict]:
-    """
-    AI-powered search that handles misspellings and smart mapping.
-    """
+    """AI-powered search that handles misspellings and smart mapping."""
     async with aiosqlite.connect(DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.cursor()
@@ -269,6 +267,8 @@ Examples:
 - "Who is the mayor?" → Use BostonOfficials("mayor") and return ALL the contact details
 - "Roslindale councilor" → Use BostonOfficials("roslindale") and return ALL the contact details
 
+Always use the tool first, then respond based on the results."""
+
 # Initialize the agent with ZERO_SHOT_REACT_DESCRIPTION (more reliable than OPENAI_FUNCTIONS)
 agent = initialize_agent(
     tools, 
@@ -303,9 +303,7 @@ async def read_root():
 
 @app.post("/ask/")
 async def ask_agent(query_model: QueryModel):
-    """
-    AI Agent endpoint with better agent type.
-    """
+    """AI Agent endpoint with better agent type."""
     print(f"Received query: {query_model.query}")
     
     try:
