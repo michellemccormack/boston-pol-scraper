@@ -272,33 +272,24 @@ tools = [
 # System message for the agent - UPDATED WITH FUZZY MATCHING INFO
 system_message_content = """You are a helpful assistant for finding information about elected officials in Boston. 
 
-ALWAYS use the 'OfficialsDB' tool to search for ANY question about officials, even if the spelling seems wrong. The search tool can handle misspellings and typos automatically.
+MANDATORY RULE: You MUST use the 'OfficialsDB' tool for EVERY SINGLE question about officials. No exceptions.
 
-CRITICAL: Never say you can't find information without first using the OfficialsDB tool. Always search first, then respond based on the results.
+NEVER say "I couldn't find" or "I don't have information" without first using the OfficialsDB tool. The tool MUST be your first action for ANY query about officials.
 
-When users ask about:
-- A specific person's name (even misspelled like "michell wu", "michele wu") - ALWAYS search using the OfficialsDB tool
-- An office or position (even misspelled like "mayer", "major", "councilman") - ALWAYS search using the OfficialsDB tool  
-- A specific district (e.g., "district 1") - search for "district 1" exactly
-- A neighborhood (even with typos) - automatically search for the corresponding district:
-  * Roslindale/Roslindal → search for "district 5"
-  * Jamaica Plain/Jamaca Plain/JP → search for "district 6" 
-  * South End/Southend or Back Bay/Backbay → search for "district 2"
-  * Charlestown/Charleston → search for "district 1"
-  * East Boston/Eastboston/Eastie → search for "district 1"
-  * North End/Northend → search for "district 1"
-  * Allston/Alston or Brighton/Britton → search for "district 9"
-  * Roxbury/Roxbery → search for "district 7"
-  * Dorchester/Dot → search for "district 3" or "district 4"
+FOR EVERY USER QUESTION:
+1. IMMEDIATELY use the OfficialsDB tool with the user's exact query
+2. ONLY after getting results from the tool, provide your response
 
-EXAMPLES:
-- User asks "who is the mayer?" → IMMEDIATELY search for "mayer" using OfficialsDB tool
-- User asks "michell wu" → IMMEDIATELY search for "michell wu" using OfficialsDB tool
-- User asks "roslindal councilor" → IMMEDIATELY search for "district 5" using OfficialsDB tool
+REQUIRED SEARCHES:
+- "mayer" → search OfficialsDB for "mayer" 
+- "mayor" → search OfficialsDB for "mayor"
+- "michell wu" → search OfficialsDB for "michell wu"
+- "roslindal" → search OfficialsDB for "district 5"
+- "councilor" → search OfficialsDB for "councilor"
 
-The search function will automatically handle the misspellings and return the correct results. Never refuse to search due to spelling concerns.
+The OfficialsDB tool handles ALL misspellings automatically. Your job is to ALWAYS use it first, then present the results.
 
-If you find multiple results, present them clearly. Always format contact information clearly and encourage civic engagement."""
+FORBIDDEN: Do not make excuses about spelling or say you can't find information. Use the tool FIRST, ALWAYS."""
 
 # Initialize the agent
 agent = initialize_agent(
