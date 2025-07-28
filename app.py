@@ -1,6 +1,7 @@
 import aiosqlite
 import csv
 import os
+import re
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from langchain.agents import initialize_agent, AgentType, Tool
@@ -71,25 +72,49 @@ async def init_database():
             else:
                 print("Warning: officials.csv not found")
 
-# Database search function
+# IMPROVED Database search function
 async def get_officials_by_name(name: str) -> List[Dict]:
     """
     Searches the database for an elected official by their name or office.
+    Now with smarter district-specific searching.
     """
     async with aiosqlite.connect(DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.cursor()
         
-        # Search broadly across name and office
-        query = """
-            SELECT * FROM officials 
-            WHERE lower(name) LIKE ? 
-            OR lower(office) LIKE ? 
-            OR lower(district_type) LIKE ?
-            OR lower(level) LIKE ?
-        """
-        search_term = f"%{name.lower()}%"
-        await cursor.execute(query, (search_term, search_term, search_term, search_term))
+        # Check if this is a district-specific search
+        district_match = re.search(r'district\s+(\d+)', name.lower())
+        
+        if district_match:
+            # This is a district search - be very specific
+            district_num = district_match.group(1)
+            query = """
+                SELECT * FROM officials 
+                WHERE district_type = 'District' AND district_number = ?
+            """
+            await cursor.execute(query, (district_num,))
+        else:
+            # General search - but be more precise
+            search_term = f"%{name.lower()}%"
+            
+            # If searching for "city councilor" generally, get at-large councilors
+            if "city councilor" in name.lower() and "district" not in name.lower():
+                query = """
+                    SELECT * FROM officials 
+                    WHERE lower(office) LIKE '%city councilor%' 
+                    AND (district_type = 'At-Large' OR district_type IS NULL OR district_type = '')
+                    ORDER BY name
+                """
+                await cursor.execute(query)
+            else:
+                # Search by name, specific office, or level
+                query = """
+                    SELECT * FROM officials 
+                    WHERE lower(name) LIKE ? 
+                    OR (lower(office) LIKE ? AND lower(office) NOT LIKE '%city councilor%')
+                    OR lower(level) LIKE ?
+                """
+                await cursor.execute(query, (search_term, search_term, search_term))
         
         results = await cursor.fetchall()
         return [dict(row) for row in results]
@@ -142,37 +167,35 @@ llm = ChatOpenAI(
     temperature=0, 
     model="gpt-3.5-turbo", 
     api_key=os.environ.get("OPENAI_API_KEY")
-)  # Fixed: Added missing closing parenthesis
+)
 
 # Define tools for the agent
 tools = [
     Tool.from_function(
         func=sync_get_officials_by_name,
         name="OfficialsDB",
-        description="A tool that searches the Boston officials database. Use this for any question about elected officials, their names, offices, or contact information. Input should be the name of the official or the office they hold (e.g., 'mayor', 'city councilor', 'state senator')."
+        description="A tool that searches the Boston officials database. Use this for any question about elected officials, their names, offices, or contact information. For district searches, use format 'district 5' to find the specific district councilor."
     )
 ]
 
-# System message for the agent - UPDATED TO BE SMARTER
+# System message for the agent - UPDATED WITH BETTER INSTRUCTIONS
 system_message_content = """You are a helpful assistant for finding information about elected officials in Boston. 
 
 Always use the 'OfficialsDB' tool to search for information. When users ask about:
 - A specific person's name (e.g., "Michelle Wu") - search for that name
-- An office or position (e.g., "mayor", "city councilor") - search for that office
-- A district (e.g., "district 1") - search for that district
-- A neighborhood (e.g., "Roslindale", "Back Bay") - search for related districts or councilors
+- An office or position (e.g., "mayor", "state senator") - search for that office
+- A specific district (e.g., "district 1") - search for "district 1" exactly
+- A neighborhood - automatically search for the corresponding district:
+  * Roslindale → search for "district 5"
+  * Jamaica Plain → search for "district 6" 
+  * South End or Back Bay → search for "district 2"
+  * Charlestown → search for "district 1"
+  * East Boston → search for "district 1"
+  * North End → search for "district 1"
 
-Be proactive and helpful:
-- If someone asks about Roslindale, automatically search for "District 5" since Roslindale is in District 5
-- If someone asks about Jamaica Plain, automatically search for "District 6" since Jamaica Plain is in District 6
-- If someone asks about South End or Back Bay, automatically search for "District 2"
-- If someone asks about Charlestown, automatically search for "District 1"
-- If someone asks about a neighborhood, search for related council districts
-- If your initial search doesn't find results, try alternative search terms automatically
-- Don't just say you can't find something - try different searches to help the user
-- If you find multiple results, present them clearly with contact information
+IMPORTANT: When someone asks about a neighborhood like Roslindale, immediately search for the corresponding district number (e.g., "district 5" for Roslindale). Do not search for the neighborhood name directly.
 
-Always format contact information clearly and encourage civic engagement."""
+If you find multiple results, present them clearly. Always format contact information clearly and encourage civic engagement."""
 
 # Initialize the agent
 agent = initialize_agent(
