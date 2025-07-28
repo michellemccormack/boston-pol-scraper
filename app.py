@@ -148,17 +148,23 @@ async def get_officials_by_name(name: str) -> List[Dict]:
             await cursor.execute("SELECT * FROM officials")
             all_officials = await cursor.fetchall()
             
-            # First try exact/close matches
+            # First try exact/close matches - be more precise for name searches
             search_term = f"%{normalized_name.lower()}%"
             
-            # Try regular search first
-            query = """
-                SELECT * FROM officials 
-                WHERE lower(name) LIKE ? 
-                OR lower(office) LIKE ?
-                OR lower(level) LIKE ?
-            """
-            await cursor.execute(query, (search_term, search_term, search_term))
+            # If the search looks like a specific person's name (has space or capital letters), be very specific
+            if ' ' in normalized_name or any(c.isupper() for c in name):
+                # This looks like a person's name - search names only
+                query = "SELECT * FROM officials WHERE lower(name) LIKE ?"
+                await cursor.execute(query, (search_term,))
+            else:
+                # General search for offices, titles, etc.
+                query = """
+                    SELECT * FROM officials 
+                    WHERE lower(name) LIKE ? 
+                    OR lower(office) LIKE ?
+                    OR lower(level) LIKE ?
+                """
+                await cursor.execute(query, (search_term, search_term, search_term))
             
             results = await cursor.fetchall()
             
