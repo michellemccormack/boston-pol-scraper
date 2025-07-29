@@ -4,20 +4,13 @@ import os
 import re
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from langchain.agents import initialize_agent, AgentType, Tool
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-from typing import List, Dict
-from dotenv import load_dotenv
+from typing import List, Dict, Optional
+from datetime import datetime
 from difflib import SequenceMatcher
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Define the path to your database file
-DATABASE_URL = "officials.db"
+import json
 
 app = FastAPI()
 
@@ -30,7 +23,159 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database initialization
+# Define the path to your database file
+DATABASE_URL = "officials.db"
+
+# CUSTOM CONVERSATION ENGINE
+class ConversationContext:
+    """Intelligent conversation context manager."""
+    
+    def __init__(self):
+        self.sessions = {}  # session_id -> conversation state
+    
+    def get_session(self, session_id: str = "default") -> dict:
+        """Get or create conversation session."""
+        if session_id not in self.sessions:
+            self.sessions[session_id] = {
+                "history": [],  # List of {query, response, entities, timestamp}
+                "current_entities": {},  # Currently active entities
+                "context_stack": [],  # Stack of conversation topics
+                "user_patterns": {}  # Learned user behavior patterns
+            }
+        return self.sessions[session_id]
+    
+    def extract_entities(self, text: str) -> dict:
+        """Extract people, offices, and other entities from text."""
+        entities = {
+            "people": [],
+            "offices": [],
+            "districts": [],
+            "parties": [],
+            "concepts": []
+        }
+        
+        text_lower = text.lower()
+        
+        # Extract names (pattern: Title Case Name)
+        name_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b'
+        names = re.findall(name_pattern, text)
+        entities["people"] = names
+        
+        # Extract offices
+        office_keywords = ["mayor", "governor", "senator", "representative", "councilor", "attorney general"]
+        for office in office_keywords:
+            if office in text_lower:
+                entities["offices"].append(office)
+        
+        # Extract districts
+        district_matches = re.findall(r'district\s+(\d+)', text_lower)
+        entities["districts"] = district_matches
+        
+        # Extract parties
+        party_keywords = ["democrat", "republican", "nonpartisan", "independent"]
+        for party in party_keywords:
+            if party in text_lower:
+                entities["parties"].append(party)
+        
+        # Extract concepts
+        concept_keywords = ["salary", "election", "term", "office", "contact", "phone", "email"]
+        for concept in concept_keywords:
+            if concept in text_lower:
+                entities["concepts"].append(concept)
+        
+        return entities
+    
+    def resolve_pronouns(self, query: str, session: dict) -> str:
+        """Intelligently resolve pronouns based on conversation context."""
+        query_lower = query.lower()
+        
+        # Get recent entities from conversation history
+        recent_people = []
+        for exchange in session["history"][-3:]:  # Last 3 exchanges
+            recent_people.extend(exchange.get("entities", {}).get("people", []))
+        
+        # Resolve "she/her"
+        if any(pronoun in query_lower for pronoun in ["she", "her", "hers"]):
+            # Look for recent female officials
+            female_officials = ["Michelle Wu", "Elizabeth Warren", "Ayanna Pressley", "Maura Healey", "Andrea Campbell", "Kim Driscoll"]
+            recent_females = [name for name in recent_people if name in female_officials]
+            
+            if recent_females:
+                target_name = recent_females[-1]  # Most recent
+            else:
+                target_name = "Michelle Wu"  # Default to most prominent
+            
+            query = re.sub(r'\bshe\b', target_name, query, flags=re.IGNORECASE)
+            query = re.sub(r'\bher\b', target_name, query, flags=re.IGNORECASE)
+            query = re.sub(r'\bhers\b', target_name, query, flags=re.IGNORECASE)
+        
+        # Resolve "he/him"
+        if any(pronoun in query_lower for pronoun in ["he", "him", "his"]):
+            # Look for recent male officials
+            male_officials = ["Ed Markey", "Stephen Lynch", "Ed Flynn", "Nick Collins"]
+            recent_males = [name for name in recent_people if name in male_officials]
+            
+            if recent_males:
+                target_name = recent_males[-1]  # Most recent
+                query = re.sub(r'\bhe\b', target_name, query, flags=re.IGNORECASE)
+                query = re.sub(r'\bhim\b', target_name, query, flags=re.IGNORECASE)
+                query = re.sub(r'\bhis\b', target_name, query, flags=re.IGNORECASE)
+        
+        return query
+    
+    def enhance_query_with_context(self, query: str, session: dict) -> str:
+        """Enhance query with conversation context and semantic understanding."""
+        
+        # 1. Resolve pronouns
+        enhanced_query = self.resolve_pronouns(query, session)
+        
+        # 2. Add implied context from recent conversation
+        query_lower = enhanced_query.lower()
+        
+        # If asking about salary/money without a name, use recent person
+        if any(word in query_lower for word in ["salary", "pay", "money", "earn", "make", "income"]) and not any(word in query_lower for word in ["who", "what", "michelle", "elizabeth"]):
+            recent_people = []
+            for exchange in session["history"][-2:]:
+                recent_people.extend(exchange.get("entities", {}).get("people", []))
+            if recent_people:
+                enhanced_query = f"{recent_people[-1]} {enhanced_query}"
+        
+        # If asking about time/term without a name, use recent person
+        if any(phrase in query_lower for phrase in ["how long", "when did", "since when", "term"]) and not any(word in query_lower for word in ["who", "what", "michelle", "elizabeth"]):
+            recent_people = []
+            for exchange in session["history"][-2:]:
+                recent_people.extend(exchange.get("entities", {}).get("people", []))
+            if recent_people:
+                enhanced_query = f"{recent_people[-1]} {enhanced_query}"
+        
+        return enhanced_query
+    
+    def add_exchange(self, session_id: str, query: str, response: str):
+        """Add a conversation exchange to history."""
+        session = self.get_session(session_id)
+        
+        entities = self.extract_entities(f"{query} {response}")
+        
+        exchange = {
+            "query": query,
+            "response": response,
+            "entities": entities,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        session["history"].append(exchange)
+        
+        # Update current entities (keep last 3 exchanges worth)
+        session["current_entities"] = entities
+        
+        # Limit history size
+        if len(session["history"]) > 20:
+            session["history"] = session["history"][-20:]
+
+# Global conversation engine
+conversation_engine = ConversationContext()
+
+# Database initialization (KEEPING ALL OUR PROVEN CODE)
 async def init_database():
     """Initialize the database and populate it with data from CSV if it doesn't exist."""
     async with aiosqlite.connect(DATABASE_URL) as db:
@@ -42,11 +187,17 @@ async def init_database():
                 office TEXT NOT NULL,
                 district_type TEXT,
                 district_number TEXT,
+                district_area TEXT,
                 email TEXT,
                 phone TEXT,
                 website TEXT,
-                social_media TEXT,
-                level TEXT
+                x_account TEXT,
+                facebook_page TEXT,
+                level TEXT,
+                party TEXT,
+                term_start_date TEXT,
+                next_election_date TEXT,
+                annual_salary INTEGER
             )
         ''')
         
@@ -61,24 +212,114 @@ async def init_database():
                     reader = csv.DictReader(csvfile)
                     for row in reader:
                         await db.execute('''
-                            INSERT INTO officials (name, office, district_type, district_number, email, phone, website, social_media, level)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            INSERT INTO officials (name, office, district_type, district_number, district_area, email, phone, website, x_account, facebook_page, level, party, term_start_date, next_election_date, annual_salary)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             row['name'], row['office'], row['district_type'], 
-                            row['district_number'], row['email'], row['phone'], 
-                            row['website'], row['social_media'], row['level']
+                            row['district_number'], row['district_area'], row['email'], row['phone'], 
+                            row['website'], row['x_account'], row['facebook_page'], row['level'],
+                            row['party'], row['term_start_date'], row['next_election_date'], 
+                            int(row['annual_salary']) if row['annual_salary'] and row['annual_salary'].strip() else None
                         ))
                 await db.commit()
                 print("Database populated with officials data")
             else:
                 print("Warning: officials.csv not found")
 
-# Fuzzy matching helper function
+# SEARCH TERM EXTRACTION
+def extract_search_terms(query: str) -> str:
+    """Extract the actual search terms from natural language queries."""
+    query_lower = query.lower().strip()
+    
+    # Remove common question words and phrases
+    query_cleaned = re.sub(r'\b(who is|what is|tell me about|show me|find|search for|about|the|of|boston)\b', '', query_lower).strip()
+    
+    # Handle specific patterns
+    if 'mayor' in query_lower:
+        return 'mayor'
+    elif 'governor' in query_lower:
+        return 'governor'
+    elif 'senator' in query_lower:
+        return 'senator'
+    elif 'representative' in query_lower:
+        return 'representative'
+    elif 'councilor' in query_lower or 'councillor' in query_lower:
+        return 'councilor'
+    
+    # Extract names (Title Case)
+    name_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b'
+    names = re.findall(name_pattern, query)
+    if names:
+        return names[0]
+    
+    # Extract districts
+    district_match = re.search(r'district\s+(\d+)', query_lower)
+    if district_match:
+        return f"district {district_match.group(1)}"
+    
+    # Fallback to cleaned query
+    return query_cleaned if query_cleaned else query
+
+# SEMANTIC QUERY UNDERSTANDING
+class QueryAnalyzer:
+    """Understands the intent and semantic meaning of queries."""
+    
+    @staticmethod
+    def analyze_query_intent(query: str) -> dict:
+        """Analyze query intent and extract semantic information."""
+        query_lower = query.lower().strip()
+        
+        intent_analysis = {
+            "intent_type": "general_search",
+            "detail_level": "basic",
+            "target_info": [],
+            "search_entities": [],
+            "temporal_aspect": None
+        }
+        
+        # Determine detail level
+        if any(phrase in query_lower for phrase in ['what is', 'tell me about', 'about', 'details']):
+            intent_analysis["detail_level"] = "detailed"
+        elif any(phrase in query_lower for phrase in ['who is', 'who']):
+            intent_analysis["detail_level"] = "basic"
+        
+        # Determine target information
+        if any(word in query_lower for word in ['salary', 'pay', 'money', 'earn', 'make', 'income']):
+            intent_analysis["target_info"].append("salary")
+        
+        if any(phrase in query_lower for phrase in ['how long', 'when did', 'since when', 'term', 'time in office']):
+            intent_analysis["target_info"].append("time_in_office")
+        
+        if any(word in query_lower for word in ['contact', 'email', 'phone', 'reach']):
+            intent_analysis["target_info"].append("contact")
+        
+        if any(word in query_lower for word in ['party', 'democrat', 'republican', 'affiliation']):
+            intent_analysis["target_info"].append("party")
+        
+        # Extract search entities
+        # Names
+        name_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b'
+        names = re.findall(name_pattern, query)
+        intent_analysis["search_entities"].extend(names)
+        
+        # Offices
+        offices = ["mayor", "governor", "senator", "representative", "councilor"]
+        for office in offices:
+            if office in query_lower:
+                intent_analysis["search_entities"].append(office)
+        
+        # Districts
+        district_matches = re.findall(r'district\s+(\d+)', query_lower)
+        for district in district_matches:
+            intent_analysis["search_entities"].append(f"district {district}")
+        
+        return intent_analysis
+
+# KEEPING ALL OUR PROVEN SEARCH CODE
 def fuzzy_match(text1, text2, threshold=0.6):
     """Check if two strings are similar enough (handles typos)"""
     return SequenceMatcher(None, text1.lower(), text2.lower()).ratio() >= threshold
 
-# Common misspellings and variations
 NEIGHBORHOOD_VARIATIONS = {
     'roslindale': ['roslindale', 'roslindal', 'roslindail'],
     'jamaica plain': ['jamaica plain', 'jamaca plain', 'jamaicaplain', 'jp'],
@@ -121,177 +362,246 @@ def normalize_search_term(search_term):
     
     return search_term
 
-# IMPROVED Database search function with fuzzy matching
-async def get_officials_by_name(name: str) -> List[Dict]:
-    """AI-powered search that handles misspellings and smart mapping."""
+async def search_officials(query: str) -> List[Dict]:
+    """PROVEN search logic that actually works."""
     async with aiosqlite.connect(DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.cursor()
         
-        # Normalize the search term first
-        normalized_name = normalize_search_term(name)
-        print(f"Searching for: '{name}' (normalized: '{normalized_name}')")
+        query_lower = query.lower().strip()
+        print(f"Searching for: '{query}'")
         
-        # Check if this is a district-specific search
-        district_match = re.search(r'district\s+(\d+)', normalized_name.lower())
+        # PARTY-BASED SEARCHES
+        if any(word in query_lower for word in ['democrat', 'democratic', 'dem', 'blue']):
+            sql_query = """
+                SELECT * FROM officials 
+                WHERE LOWER(party) LIKE '%democrat%'
+                ORDER BY office, name
+            """
+            await cursor.execute(sql_query)
+            results = await cursor.fetchall()
+            return [dict(row) for row in results]
         
+        if any(word in query_lower for word in ['republican', 'gop', 'red']):
+            sql_query = """
+                SELECT * FROM officials 
+                WHERE LOWER(party) LIKE '%republican%' OR LOWER(party) LIKE '%gop%'
+            """
+            await cursor.execute(sql_query)
+            republicans = await cursor.fetchall()
+            
+            if not republicans:
+                return [{"special_message": "no_republicans"}]
+            else:
+                return [dict(row) for row in republicans]
+        
+        if any(word in query_lower for word in ['nonpartisan', 'non-partisan', 'independent']):
+            sql_query = """
+                SELECT * FROM officials 
+                WHERE LOWER(party) LIKE '%nonpartisan%' OR LOWER(party) LIKE '%independent%'
+                ORDER BY office, name
+            """
+            await cursor.execute(sql_query)
+            results = await cursor.fetchall()
+            return [dict(row) for row in results]
+        
+        # DISTRICT SEARCHES FIRST
+        district_match = re.search(r'district\s+(\d+)', query_lower)
         if district_match:
-            # This is a district search - be very specific
             district_num = district_match.group(1)
-            query = """
+            sql_query = """
                 SELECT * FROM officials 
                 WHERE district_type = 'District' AND district_number = ?
             """
-            await cursor.execute(query, (district_num,))
-        else:
-            # Get all officials for fuzzy matching
-            await cursor.execute("SELECT * FROM officials")
-            all_officials = await cursor.fetchall()
-            
-            # First try exact/close matches - be more precise for name searches
-            search_term = f"%{normalized_name.lower()}%"
-            
-            # If the search looks like a specific person's name (has space or capital letters), be very specific
-            if ' ' in normalized_name or any(c.isupper() for c in name):
-                # This looks like a person's name - search names only
-                query = "SELECT * FROM officials WHERE lower(name) LIKE ?"
-                await cursor.execute(query, (search_term,))
-            else:
-                # General search for offices, titles, etc.
-                query = """
-                    SELECT * FROM officials 
-                    WHERE lower(name) LIKE ? 
-                    OR lower(office) LIKE ?
-                    OR lower(level) LIKE ?
-                """
-                await cursor.execute(query, (search_term, search_term, search_term))
-            
+            await cursor.execute(sql_query, (district_num,))
             results = await cursor.fetchall()
-            
-            # If no results, try fuzzy matching on names AND offices
-            if not results:
-                fuzzy_matches = []
-                for official in all_officials:
-                    # Check name similarity
-                    if fuzzy_match(normalized_name, official['name'], 0.6):
-                        fuzzy_matches.append(dict(official))
-                    # Check office similarity  
-                    elif fuzzy_match(normalized_name, official['office'], 0.6):
-                        fuzzy_matches.append(dict(official))
-                    # Special check for mayor/mayer
-                    elif ('mayor' in normalized_name.lower() or 'mayer' in normalized_name.lower()) and 'mayor' in official['office'].lower():
-                        fuzzy_matches.append(dict(official))
-                
-                return fuzzy_matches
+            return [dict(row) for row in results]
         
+        # OFFICE SEARCHES (FIXED - this was broken)
+        normalized_query = normalize_search_term(query)
+        search_pattern = f"%{normalized_query}%"
+        
+        # Try office search FIRST for queries like "mayor"
+        sql_query = """
+            SELECT * FROM officials 
+            WHERE LOWER(office) LIKE LOWER(?)
+        """
+        await cursor.execute(sql_query, (search_pattern,))
         results = await cursor.fetchall()
+        
+        if results:
+            return [dict(row) for row in results]
+        
+        # NAME-BASED SEARCHES
+        sql_query = """
+            SELECT * FROM officials 
+            WHERE LOWER(name) LIKE LOWER(?)
+        """
+        await cursor.execute(sql_query, (search_pattern,))
+        results = await cursor.fetchall()
+        
+        if results:
+            return [dict(row) for row in results]
+        
+        # GENERAL SEARCH (fallback)
+        sql_query = """
+            SELECT * FROM officials 
+            WHERE LOWER(name) LIKE LOWER(?) 
+            OR LOWER(office) LIKE LOWER(?)
+            OR LOWER(level) LIKE LOWER(?)
+        """
+        await cursor.execute(sql_query, (search_pattern, search_pattern, search_pattern))
+        results = await cursor.fetchall()
+        
         return [dict(row) for row in results]
 
-# Synchronous wrapper for the async function (needed for LangChain)
-def sync_get_officials_by_name(name: str) -> str:
-    """Synchronous wrapper for the async database function."""
-    try:
-        # Get the current event loop or create a new one
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Run the async function
-        if loop.is_running():
-            # If we're already in an async context, we need to handle this differently
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, get_officials_by_name(name))
-                results = future.result()
-        else:
-            results = loop.run_until_complete(get_officials_by_name(name))
-        
-        if not results:
-            # Try to suggest similar terms
-            normalized = normalize_search_term(name)
-            if normalized != name:
-                return f"No officials found matching '{name}'. Did you mean '{normalized}'? Let me search for that."
-            return f"No officials found matching '{name}'. Try searching for 'mayor', 'city councilor', or a specific name."
-        
-        # Format the results nicely with clear formatting
-        formatted_results = []
-        for official in results:
-            result_text = f"**{official['name']}** - {official['office']}"
-            if official['district_type'] and official['district_number']:
-                result_text += f" ({official['district_type']} {official['district_number']})"
-            
-            result_text += "\n"  # Add line break
-            
-            if official['email']:
-                result_text += f"📧 **Email:** {official['email']}\n"
-            if official['phone']:
-                result_text += f"📞 **Phone:** {official['phone']}\n"
-            if official['website']:
-                result_text += f"🌐 **Website:** {official['website']}\n"
-            
-            # Add encouragement for civic engagement
-            result_text += "\nFeel free to reach out to engage with your elected official!"
-            
-            formatted_results.append(result_text)
-        
-        return "\n\n".join(formatted_results)
+# INTELLIGENT RESPONSE GENERATOR
+class ResponseGenerator:
+    """Generates contextually appropriate responses."""
     
-    except Exception as e:
-        return f"Error searching for officials: {str(e)}"
+    @staticmethod
+    def calculate_time_in_office(start_date_str: str) -> str:
+        """Calculate how long someone has been in office."""
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            current_date = datetime.now()
+            difference = current_date - start_date
+            
+            years = difference.days // 365
+            months = (difference.days % 365) // 30
+            
+            if years > 0:
+                return f"{years} year{'s' if years != 1 else ''} and {months} month{'s' if months != 1 else ''}"
+            elif months > 0:
+                return f"{months} month{'s' if months != 1 else ''}"
+            else:
+                return f"{difference.days} day{'s' if difference.days != 1 else ''}"
+        except:
+            return "unknown duration"
+    
+    @staticmethod
+    def generate_response(officials: List[Dict], intent_analysis: dict, original_query: str) -> str:
+        """Generate intelligent, contextually appropriate responses."""
+        
+        if not officials:
+            return f"I couldn't find any officials matching '{original_query}'. Try searching by name, office, or party."
+        
+        # Handle special messages
+        if officials[0].get("special_message") == "no_republicans":
+            return """**No Republican officials found in Boston government.**
 
-# Create the LangChain Agent with different agent type
-llm = ChatOpenAI(
-    temperature=0, 
-    model="gpt-3.5-turbo", 
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
+Boston city elections (Mayor, City Council) are officially **nonpartisan** - candidates don't run with party labels. However, most Boston officials are Democrats.
 
-# Define tools for the agent
-tools = [
-    Tool.from_function(
-        func=sync_get_officials_by_name,
-        name="BostonOfficials",
-        description="Search for Boston elected officials by name, office, or neighborhood. Always use this tool for any question about Boston officials."
-    )
-]
+At the state and federal level representing Boston, officials are predominantly Democratic."""
+        
+        # Single official responses
+        if len(officials) == 1:
+            official = officials[0]
+            
+            # SALARY-FOCUSED RESPONSES
+            if "salary" in intent_analysis["target_info"]:
+                if official['annual_salary']:
+                    return f"**{official['name']}** earns **${official['annual_salary']:,} per year** as {official['office']}."
+                else:
+                    return f"I don't have salary information for **{official['name']}**."
+            
+            # TIME-IN-OFFICE RESPONSES
+            if "time_in_office" in intent_analysis["target_info"]:
+                if official['term_start_date']:
+                    duration = ResponseGenerator.calculate_time_in_office(official['term_start_date'])
+                    return f"**{official['name']}** has been {official['office']} since **{official['term_start_date']}** ({duration})."
+                else:
+                    return f"I don't have the start date information for **{official['name']}**."
+            
+            # CONTACT-FOCUSED RESPONSES
+            if "contact" in intent_analysis["target_info"]:
+                result = f"**Contact {official['name']}:**\n"
+                if official['email']:
+                    result += f"📧 {official['email']}\n"
+                if official['phone']:
+                    result += f"📞 {official['phone']}\n"
+                if official['website']:
+                    result += f"🌐 {official['website']}\n"
+                return result
+            
+            # DETAILED INFO RESPONSES
+            if intent_analysis["detail_level"] == "detailed":
+                result_text = f"**{official['name']}** - {official['office']}"
+                if official['district_type'] and official['district_number']:
+                    result_text += f" ({official['district_type']} {official['district_number']})"
+                
+                result_text += "\n"
+                
+                if official['party']:
+                    party_emoji = "🔵" if "Democrat" in official['party'] else "🔴" if "Republican" in official['party'] else "⚫"
+                    result_text += f"{party_emoji} **Party:** {official['party']}\n"
+                if official['annual_salary']:
+                    result_text += f"💰 **Annual Salary:** ${official['annual_salary']:,}\n"
+                if official['term_start_date']:
+                    duration = ResponseGenerator.calculate_time_in_office(official['term_start_date'])
+                    result_text += f"📅 **In Office Since:** {official['term_start_date']} ({duration})\n"
+                if official['next_election_date']:
+                    result_text += f"🗳️ **Next Election:** {official['next_election_date']}\n"
+                
+                result_text += "\n**Contact:**\n"
+                if official['email']:
+                    result_text += f"📧 {official['email']}\n"
+                if official['phone']:
+                    result_text += f"📞 {official['phone']}\n"
+                if official['website']:
+                    result_text += f"🌐 {official['website']}\n"
+                
+                return result_text
+            
+            # BASIC RESPONSES
+            else:
+                return f"**{official['name']}**"
+        
+        # Multiple officials
+        else:
+            result = f"Found {len(officials)} officials:\n\n"
+            for i, official in enumerate(officials[:8], 1):
+                result += f"**{i}. {official['name']}** - {official['office']}"
+                if official['party']:
+                    party_emoji = "🔵" if "Democrat" in official['party'] else "🔴" if "Republican" in official['party'] else "⚫"
+                    result += f" ({party_emoji} {official['party']})"
+                result += f"\n📧 {official['email']}\n\n"
+            
+            return result
 
-# System message for the agent - CLEAR AND DIRECT
-system_message_content = """You are an AI assistant that helps people find Boston elected officials.
+# MAIN CONVERSATION PROCESSOR
+async def process_conversation(query: str, session_id: str = "default") -> str:
+    """Main conversation processing pipeline."""
+    
+    # 1. Get conversation session
+    session = conversation_engine.get_session(session_id)
+    
+    # 2. Enhance query with conversation context
+    enhanced_query = conversation_engine.enhance_query_with_context(query, session)
+    
+    # 2.5. EXTRACT KEY SEARCH TERMS (fix for "Who is the mayor?" type queries)
+    search_query = extract_search_terms(enhanced_query)
+    
+    # 3. Analyze query intent
+    analyzer = QueryAnalyzer()
+    intent_analysis = analyzer.analyze_query_intent(enhanced_query)
+    
+    # 4. Search officials database
+    officials = await search_officials(search_query)
+    
+    # 5. Generate intelligent response
+    generator = ResponseGenerator()
+    response = generator.generate_response(officials, intent_analysis, query)
+    
+    # 6. Add to conversation history
+    conversation_engine.add_exchange(session_id, query, response)
+    
+    return response
 
-CRITICAL: For ANY question about officials, you MUST use the BostonOfficials tool first. Never respond without using the tool.
-
-When someone asks about officials:
-1. Use the BostonOfficials tool with their exact query
-2. Return the COMPLETE results from the tool, including all contact information
-3. Do NOT summarize - show the full formatted response with emails, phones, websites
-
-IMPORTANT: Always return the complete, formatted contact information from the BostonOfficials tool. Do not just give names - give the full details.
-
-Examples:
-- "Who is the mayor?" → Use BostonOfficials("mayor") and return ALL the contact details
-- "Roslindale councilor" → Use BostonOfficials("roslindale") and return ALL the contact details
-
-Always use the tool first, then respond based on the results."""
-
-# Initialize the agent with ZERO_SHOT_REACT_DESCRIPTION (more reliable than OPENAI_FUNCTIONS)
-agent = initialize_agent(
-    tools, 
-    llm, 
-    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose=True,
-    handle_parsing_errors=True,
-    agent_kwargs={
-        "prefix": system_message_content,
-        "format_instructions": "Use the following format:\n\nQuestion: the input question you must answer\nThought: you should always think about what to do\nAction: the action to take, should be one of [BostonOfficials]\nAction Input: the input to the action\nObservation: the result of the action\n... (this Thought/Action/Action Input/Observation can repeat N times)\nThought: I now know the final answer\nFinal Answer: the final answer to the original input question",
-        "suffix": "Begin!\n\nQuestion: {input}\nThought:{agent_scratchpad}"
-    }
-)
-
-# Pydantic model for requests
+# API ENDPOINTS
 class QueryModel(BaseModel):
     query: str
+    session_id: str = "default"
 
 @app.on_event("startup")
 async def startup_event():
@@ -308,21 +618,32 @@ async def read_root():
         return HTMLResponse("<h1>Error: index.html not found</h1>", status_code=404)
 
 @app.post("/ask/")
-async def ask_agent(query_model: QueryModel):
-    """AI Agent endpoint with better agent type."""
-    print(f"Received query: {query_model.query}")
+async def ask_civic_ai(query_model: QueryModel):
+    """Custom civic AI conversation endpoint."""
+    print(f"Received query: {query_model.query} (Session: {query_model.session_id})")
     
     try:
-        # Run the AI agent
-        response = agent.run(query_model.query)
-        print(f"Agent response: {response}")
+        # Process through custom conversation engine
+        response = await process_conversation(query_model.query, query_model.session_id)
+        print(f"AI response: {response}")
         return {"response": response}
     
     except Exception as e:
-        print(f"Error during agent execution: {e}")
+        print(f"Error during conversation processing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+@app.get("/debug/conversation/{session_id}")
+async def debug_conversation(session_id: str):
+    """Debug endpoint to view conversation state."""
+    session = conversation_engine.get_session(session_id)
+    return {
+        "session_id": session_id,
+        "history_count": len(session["history"]),
+        "current_entities": session["current_entities"],
+        "recent_exchanges": session["history"][-3:] if session["history"] else []
+    }

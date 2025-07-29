@@ -26,7 +26,7 @@
             background: rgba(255, 255, 255, 0.98);
             border-radius: 25px;
             padding: 35px;
-            max-width: 500px;
+            max-width: 750px; /* INCREASED from 500px to 750px (50% wider) */
             width: 100%;
             box-shadow: 0 25px 50px rgba(251, 77, 66, 0.2);
             backdrop-filter: blur(15px);
@@ -35,7 +35,7 @@
 
         .header {
             text-align: center;
-            margin-bottom: 45px;
+            margin-bottom: 25px; /* REDUCED from 45px to 25px */
         }
 
         .header h1 {
@@ -57,11 +57,15 @@
 
         .location-section {
             text-align: center;
-            margin-bottom: 35px;
-            padding: 25px;
+            margin-bottom: 20px;
+            padding: 35px 25px; /* INCREASED top/bottom padding from 25px to 35px */
             background: linear-gradient(135deg, rgba(251, 77, 66, 0.08) 0%, rgba(255, 107, 90, 0.05) 100%);
             border-radius: 20px;
             border: 2px solid rgba(251, 77, 66, 0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .location-button {
@@ -75,7 +79,7 @@
             font-family: 'Poppins', sans-serif;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-bottom: 12px;
+            margin: 0; /* REMOVED margin-bottom: 12px */
             box-shadow: 0 8px 20px rgba(251, 77, 66, 0.3);
         }
 
@@ -95,6 +99,7 @@
             color: #666;
             margin-top: 12px;
             font-weight: 500;
+            min-height: 0; /* ADDED to prevent taking up space when empty */
         }
 
         .chat-container {
@@ -102,8 +107,8 @@
             border-radius: 20px;
             padding: 20px;
             margin-bottom: 20px;
-            min-height: 250px;
-            max-height: 320px;
+            min-height: 200px; /* REDUCED from 250px to 200px */
+            max-height: 300px; /* REDUCED from 320px to 300px */
             overflow-y: auto;
             border: 2px solid rgba(251, 77, 66, 0.1);
         }
@@ -273,8 +278,8 @@
             <button class="location-button" id="locationButton" onclick="findMyCouncilor()">
                 📍 Find My City Councilor
             </button>
-            <div class="location-status" id="locationStatus">
-                Click above to automatically find your district based on your location
+            <div class="location-status" id="locationStatus" style="display: none;">
+                <!-- Hidden by default, will show when location is detected -->
             </div>
         </div>
 
@@ -346,12 +351,14 @@
 
         async function findMyCouncilor() {
             if (!navigator.geolocation) {
+                locationStatus.style.display = "block";
                 locationStatus.textContent = "Geolocation is not supported by this browser";
                 return;
             }
 
             locationButton.disabled = true;
             locationButton.textContent = "Getting location...";
+            locationStatus.style.display = "block";
             locationStatus.textContent = "Requesting your location...";
 
             navigator.geolocation.getCurrentPosition(
@@ -361,6 +368,7 @@
                     
                     // Check if coordinates are in Boston area (rough bounds)
                     if (lat < 42.2 || lat > 42.4 || lng < -71.2 || lng > -70.9) {
+                        locationStatus.style.display = "block";
                         locationStatus.textContent = "You don't appear to be in Boston. Try asking about a specific neighborhood.";
                         locationButton.disabled = false;
                         locationButton.textContent = "📍 Find My City Councilor";
@@ -370,6 +378,7 @@
                     const district = getDistrictFromCoordinates(lat, lng);
                     const districtInfo = bostonDistricts[district];
                     
+                    locationStatus.style.display = "block";
                     locationStatus.textContent = `Found you in District ${district} (${districtInfo.name})`;
                     
                     // Automatically ask about the user's district
@@ -392,6 +401,7 @@
                             errorMessage = "Location request timed out.";
                             break;
                     }
+                    locationStatus.style.display = "block";
                     locationStatus.textContent = errorMessage;
                     locationButton.disabled = false;
                     locationButton.textContent = "📍 Find My City Councilor";
