@@ -175,11 +175,11 @@ class ConversationContext:
 # Global conversation engine
 conversation_engine = ConversationContext()
 
-# Database initialization (KEEPING ALL OUR PROVEN CODE)
+# Database initialization with ENHANCED SCHEMA
 async def init_database():
     """Initialize the database and populate it with data from CSV if it doesn't exist."""
     async with aiosqlite.connect(DATABASE_URL) as db:
-        # Create the officials table
+        # Create the officials table with NEW enhanced columns
         await db.execute('''
             CREATE TABLE IF NOT EXISTS officials (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,7 +197,18 @@ async def init_database():
                 party TEXT,
                 term_start_date TEXT,
                 next_election_date TEXT,
-                annual_salary INTEGER
+                annual_salary INTEGER,
+                bio_summary TEXT,
+                education TEXT,
+                career_before_office TEXT,
+                key_policy_areas TEXT,
+                committee_memberships TEXT,
+                recent_major_vote TEXT,
+                recent_initiative TEXT,
+                campaign_promises TEXT,
+                responsiveness_score INTEGER,
+                town_halls_per_year TEXT,
+                office_hours TEXT
             )
         ''')
         
@@ -206,23 +217,45 @@ async def init_database():
         count = await cursor.fetchone()
         
         if count[0] == 0:
-            # Populate from CSV file
+            # Populate from CSV file with NEW enhanced columns
             if os.path.exists('officials.csv'):
                 with open('officials.csv', 'r', newline='', encoding='utf-8') as csvfile:
                     reader = csv.DictReader(csvfile)
                     for row in reader:
+                        # Handle responsiveness_score conversion (empty string to None)
+                        responsiveness_score = None
+                        if row.get('responsiveness_score') and row['responsiveness_score'].strip():
+                            try:
+                                responsiveness_score = int(row['responsiveness_score'])
+                            except ValueError:
+                                responsiveness_score = None
+                        
                         await db.execute('''
-                            INSERT INTO officials (name, office, district_type, district_number, district_area, email, phone, website, x_account, facebook_page, level, party, term_start_date, next_election_date, annual_salary)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            INSERT INTO officials (
+                                name, office, district_type, district_number, district_area, 
+                                email, phone, website, x_account, facebook_page, level, party, 
+                                term_start_date, next_election_date, annual_salary,
+                                bio_summary, education, career_before_office, key_policy_areas,
+                                committee_memberships, recent_major_vote, recent_initiative,
+                                campaign_promises, responsiveness_score, town_halls_per_year, office_hours
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             row['name'], row['office'], row['district_type'], 
                             row['district_number'], row['district_area'], row['email'], row['phone'], 
                             row['website'], row['x_account'], row['facebook_page'], row['level'],
                             row['party'], row['term_start_date'], row['next_election_date'], 
-                            int(row['annual_salary']) if row['annual_salary'] and row['annual_salary'].strip() else None
+                            int(row['annual_salary']) if row['annual_salary'] and row['annual_salary'].strip() else None,
+                            # NEW enhanced columns (populated with rich data)
+                            row.get('bio_summary', ''), row.get('education', ''), 
+                            row.get('career_before_office', ''), row.get('key_policy_areas', ''),
+                            row.get('committee_memberships', ''), row.get('recent_major_vote', ''),
+                            row.get('recent_initiative', ''), row.get('campaign_promises', ''),
+                            responsiveness_score, row.get('town_halls_per_year', ''), 
+                            row.get('office_hours', '')
                         ))
                 await db.commit()
-                print("Database populated with officials data")
+                print("Database populated with enhanced officials data")
             else:
                 print("Warning: officials.csv not found")
 
@@ -230,11 +263,47 @@ async def init_database():
 def extract_search_terms(query: str) -> str:
     """Extract the actual search terms from natural language queries."""
     query_lower = query.lower().strip()
+    original_query = query.strip()
     
-    # Remove common question words and phrases
-    query_cleaned = re.sub(r'\b(who is|what is|tell me about|show me|find|search for|about|the|of|boston)\b', '', query_lower).strip()
+    # First, try to extract names from the ORIGINAL query (preserves capitalization)
+    name_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b'
+    names = re.findall(name_pattern, original_query)
+    if names:
+        return names[0]
     
-    # Handle specific patterns
+    # Look for names in different question formats
+    # Handle "Did [Name] [verb]" patterns
+    did_pattern = r'\bdid\s+([a-z]+ [a-z]+(?:\s[a-z]+)*)\s+'
+    did_match = re.search(did_pattern, query_lower)
+    if did_match:
+        return ' '.join(word.capitalize() for word in did_match.group(1).split())
+    
+    # Handle "Where did [Name] [verb]" patterns  
+    where_did_pattern = r'\bwhere did\s+([a-z]+ [a-z]+(?:\s[a-z]+)*)\s+'
+    where_did_match = re.search(where_did_pattern, query_lower)
+    if where_did_match:
+        return ' '.join(word.capitalize() for word in where_did_match.group(1).split())
+    
+    # Handle "What did [Name] [verb]" patterns
+    what_did_pattern = r'\bwhat did\s+([a-z]+ [a-z]+(?:\s[a-z]+)*)\s+'
+    what_did_match = re.search(what_did_pattern, query_lower)
+    if what_did_match:
+        return ' '.join(word.capitalize() for word in what_did_match.group(1).split())
+    
+    # Handle "What does [Name] [verb]" patterns
+    what_does_pattern = r'\bwhat does\s+([a-z]+ [a-z]+(?:\s[a-z]+)*)\s+'
+    what_does_match = re.search(what_does_pattern, query_lower)
+    if what_does_match:
+        return ' '.join(word.capitalize() for word in what_does_match.group(1).split())
+    
+    # Look for names in possessive format (handles "michelle wu's")
+    possessive_pattern = r'\b([a-z]+ [a-z]+)\'s\b'
+    possessive_names = re.findall(possessive_pattern, query_lower)
+    if possessive_names:
+        # Convert to Title Case
+        return ' '.join(word.capitalize() for word in possessive_names[0].split())
+    
+    # Handle specific office patterns
     if 'mayor' in query_lower:
         return 'mayor'
     elif 'governor' in query_lower:
@@ -246,18 +315,15 @@ def extract_search_terms(query: str) -> str:
     elif 'councilor' in query_lower or 'councillor' in query_lower:
         return 'councilor'
     
-    # Extract names (Title Case)
-    name_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b'
-    names = re.findall(name_pattern, query)
-    if names:
-        return names[0]
-    
     # Extract districts
     district_match = re.search(r'district\s+(\d+)', query_lower)
     if district_match:
         return f"district {district_match.group(1)}"
     
-    # Fallback to cleaned query
+    # Remove common question words and phrases for general search
+    query_cleaned = re.sub(r'\b(who is|what is|tell me about|show me|find|search for|about|the|of|boston|educational|background|policy|focus|career|did|does|where|what)\b', '', query_lower).strip()
+    
+    # Final fallback - return cleaned query or original
     return query_cleaned if query_cleaned else query
 
 # SEMANTIC QUERY UNDERSTANDING
@@ -455,9 +521,9 @@ async def search_officials(query: str) -> List[Dict]:
         
         return [dict(row) for row in results]
 
-# INTELLIGENT RESPONSE GENERATOR
+# ENHANCED RESPONSE GENERATOR WITH BIOGRAPHICAL DATA
 class ResponseGenerator:
-    """Generates contextually appropriate responses."""
+    """Generates contextually appropriate responses using rich biographical data."""
     
     @staticmethod
     def calculate_time_in_office(start_date_str: str) -> str:
@@ -481,7 +547,7 @@ class ResponseGenerator:
     
     @staticmethod
     def generate_response(officials: List[Dict], intent_analysis: dict, original_query: str) -> str:
-        """Generate intelligent, contextually appropriate responses."""
+        """Generate intelligent, contextually appropriate responses using enhanced biographical data."""
         
         if not officials:
             return f"I couldn't find any officials matching '{original_query}'. Try searching by name, office, or party."
@@ -497,6 +563,27 @@ At the state and federal level representing Boston, officials are predominantly 
         # Single official responses
         if len(officials) == 1:
             official = officials[0]
+            
+            # EDUCATION-FOCUSED RESPONSES (More flexible detection)
+            if any(word in original_query.lower() for word in ['education', 'educational', 'school', 'college', 'university', 'degree', 'studied', 'graduate', 'graduated', 'attend', 'attended', 'alma mater', 'where did', 'went to school', 'go to school', 'go to college']):
+                if official.get('education') and official['education'].strip():
+                    return f"**{official['name']}** graduated from **{official['education']}**."
+                else:
+                    return f"I don't have educational background information for **{official['name']}**."
+            
+            # CAREER/BACKGROUND-FOCUSED RESPONSES (More flexible detection)
+            if any(phrase in original_query.lower() for phrase in ['career', 'background', 'before office', 'work', 'job', 'experience', 'worked', 'did before', 'previous job', 'used to do', 'profession', 'occupation']):
+                if official.get('career_before_office') and official['career_before_office'].strip():
+                    return f"**Before entering office, {official['name']}** worked as: {official['career_before_office']}."
+                else:
+                    return f"I don't have career background information for **{official['name']}**."
+            
+            # POLICY/FOCUS-FOCUSED RESPONSES (Much more flexible detection)
+            if any(word in original_query.lower() for word in ['policy', 'policies', 'focus', 'focuses', 'issues', 'priorities', 'works on', 'champions', 'believe', 'believes', 'stands for', 'fights for', 'supports', 'cares about', 'passionate about', 'agenda', 'platform', 'positions', 'views', 'stance', 'advocates', 'committed to']):
+                if official.get('key_policy_areas') and official['key_policy_areas'].strip():
+                    return f"**{official['name']}** focuses on: **{official['key_policy_areas']}**."
+                else:
+                    return f"I don't have policy focus information for **{official['name']}**."
             
             # SALARY-FOCUSED RESPONSES
             if "salary" in intent_analysis["target_info"]:
@@ -524,13 +611,29 @@ At the state and federal level representing Boston, officials are predominantly 
                     result += f"🌐 {official['website']}\n"
                 return result
             
-            # DETAILED INFO RESPONSES
+            # DETAILED INFO RESPONSES (Enhanced with biographical data)
             if intent_analysis["detail_level"] == "detailed":
                 result_text = f"**{official['name']}** - {official['office']}"
                 if official['district_type'] and official['district_number']:
                     result_text += f" ({official['district_type']} {official['district_number']})"
                 
                 result_text += "\n"
+                
+                # Add biographical summary if available
+                if official.get('bio_summary') and official['bio_summary'].strip():
+                    result_text += f"📋 **Background:** {official['bio_summary']}\n"
+                
+                # Add education if available
+                if official.get('education') and official['education'].strip():
+                    result_text += f"🎓 **Education:** {official['education']}\n"
+                
+                # Add career background if available
+                if official.get('career_before_office') and official['career_before_office'].strip():
+                    result_text += f"💼 **Career Before Office:** {official['career_before_office']}\n"
+                
+                # Add policy focus if available
+                if official.get('key_policy_areas') and official['key_policy_areas'].strip():
+                    result_text += f"🎯 **Policy Focus:** {official['key_policy_areas']}\n"
                 
                 if official['party']:
                     party_emoji = "🔵" if "Democrat" in official['party'] else "🔴" if "Republican" in official['party'] else "⚫"
@@ -553,9 +656,15 @@ At the state and federal level representing Boston, officials are predominantly 
                 
                 return result_text
             
-            # BASIC RESPONSES
+            # BASIC RESPONSES (Enhanced with bio summary)
             else:
-                return f"**{official['name']}**"
+                basic_response = f"**{official['name']}**"
+                
+                # Add compelling bio summary if available
+                if official.get('bio_summary') and official['bio_summary'].strip():
+                    basic_response += f" - {official['bio_summary']}"
+                
+                return basic_response
         
         # Multiple officials
         else:
@@ -565,6 +674,11 @@ At the state and federal level representing Boston, officials are predominantly 
                 if official['party']:
                     party_emoji = "🔵" if "Democrat" in official['party'] else "🔴" if "Republican" in official['party'] else "⚫"
                     result += f" ({party_emoji} {official['party']})"
+                
+                # Add bio summary for multiple results if available
+                if official.get('bio_summary') and official['bio_summary'].strip():
+                    result += f"\n   📋 {official['bio_summary']}"
+                
                 result += f"\n📧 {official['email']}\n\n"
             
             return result

@@ -50,9 +50,10 @@
         }
 
         .header p {
-            color: #555;
+            color: black;
             font-size: 1.2rem;
             font-weight: 600;
+            font-style: italic;
         }
 
         .location-section {
@@ -100,6 +101,7 @@
             margin-top: 12px;
             font-weight: 500;
             min-height: 0; /* ADDED to prevent taking up space when empty */
+            display: none; /* Hidden by default */
         }
 
         .chat-container {
@@ -271,14 +273,14 @@
     <div class="container">
         <div class="header">
             <h1>Boston Pol Finder</h1>
-            <p>Because you deserve to know who works for you!</p>
+            <p>Because you deserve to know who works for you</p>
         </div>
 
         <div class="location-section">
             <button class="location-button" id="locationButton" onclick="findMyCouncilor()">
                 📍 Find My City Councilor
             </button>
-            <div class="location-status" id="locationStatus" style="display: none;">
+            <div class="location-status" id="locationStatus">
                 <!-- Hidden by default, will show when location is detected -->
             </div>
         </div>
