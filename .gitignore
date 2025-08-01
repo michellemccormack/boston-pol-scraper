@@ -3,3 +3,6 @@ officials.db
 __pycache__/
 *.pyc
 .DS_Store
+__pycache__/
+*.pyc
+.DS_Store
