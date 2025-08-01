@@ -15,27 +15,34 @@
         body {
             font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #FB4d42 0%, #ff6b5a 50%, #ff8a7a 100%);
-            min-height: 100vh;
+            height: 100vh; /* Full viewport height */
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 60px 20px;
+            padding: 20px; /* Reduced padding */
+            overflow: hidden; /* Prevent body scrolling */
         }
 
         .container {
             background: rgba(255, 255, 255, 0.98);
-            border-radius: 25px;
+            border-radius: 12px;
             padding: 35px;
-            max-width: 750px; /* INCREASED from 500px to 750px (50% wider) */
+            max-width: 750px;
             width: 100%;
+            height: 95vh; /* Increased from 90vh to 95vh - much taller */
+            max-height: 95vh;
             box-shadow: 0 25px 50px rgba(251, 77, 66, 0.2);
             backdrop-filter: blur(15px);
             border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 25px; /* REDUCED from 45px to 25px */
+            margin-bottom: 15px; /* Even more compact */
+            flex-shrink: 0;
         }
 
         .header h1 {
@@ -43,44 +50,45 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            font-size: 2.2rem;
+            font-size: 2rem; /* Slightly smaller for more chat space */
             font-weight: 900;
-            margin-bottom: 10px;
+            margin-bottom: 8px; /* Reduced */
             letter-spacing: -1px;
         }
 
         .header p {
             color: black;
-            font-size: 1.2rem;
+            font-size: 1.1rem; /* Slightly smaller */
             font-weight: 600;
             font-style: italic;
         }
 
         .location-section {
             text-align: center;
-            margin-bottom: 20px;
-            padding: 35px 25px; /* INCREASED top/bottom padding from 25px to 35px */
+            margin-bottom: 8px; /* Minimal margin */
+            padding: 12px; /* Very compact */
             background: linear-gradient(135deg, rgba(251, 77, 66, 0.08) 0%, rgba(255, 107, 90, 0.05) 100%);
-            border-radius: 20px;
+            border-radius: 10px;
             border: 2px solid rgba(251, 77, 66, 0.15);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
         }
 
         .location-button {
             background: linear-gradient(135deg, #FB4d42 0%, #ff6b5a 100%);
             color: white;
             border: none;
-            padding: 18px 35px;
-            border-radius: 30px;
-            font-size: 1.1rem;
+            padding: 14px 30px; /* Slightly smaller */
+            border-radius: 10px;
+            font-size: 1rem; /* Slightly smaller */
             font-weight: 800;
             font-family: 'Poppins', sans-serif;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin: 0; /* REMOVED margin-bottom: 12px */
+            margin: 0;
             box-shadow: 0 8px 20px rgba(251, 77, 66, 0.3);
         }
 
@@ -100,54 +108,30 @@
             color: #666;
             margin-top: 12px;
             font-weight: 500;
-            min-height: 0; /* ADDED to prevent taking up space when empty */
-            display: none; /* Hidden by default */
-        }
-
-        .chat-container {
-            background: #fafafa;
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            min-height: 200px; /* REDUCED from 250px to 200px */
-            max-height: 300px; /* REDUCED from 320px to 300px */
-            overflow-y: auto;
-            border: 2px solid rgba(251, 77, 66, 0.1);
-        }
-
-        .message {
-            margin-bottom: 20px;
-            padding: 18px;
-            border-radius: 15px;
-            max-width: 85%;
-            font-weight: 500;
-        }
-
-        .user-message {
-            background: linear-gradient(135deg, #FB4d42 0%, #ff6b5a 100%);
-            color: white;
-            margin-left: auto;
-            font-weight: 600;
-        }
-
-        .assistant-message {
-            background: #f0f0f0;
-            color: #333;
-            margin-right: auto;
-            border-left: 4px solid #FB4d42;
+            min-height: 0;
+            display: none;
         }
 
         .input-container {
             display: flex;
             gap: 15px;
             align-items: center;
+            margin-bottom: 0;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 15px 0; /* Reduced padding for more chat space */
+            margin: 15px -35px -35px -35px; /* Reduced top margin */
+            padding-left: 35px;
+            padding-right: 35px;
+            border-top: 1px solid rgba(251, 77, 66, 0.1);
+            backdrop-filter: blur(15px);
+            flex-shrink: 0; /* Don't shrink input */
         }
 
         .input-field {
             flex: 1;
             padding: 18px 25px;
             border: 3px solid rgba(251, 77, 66, 0.2);
-            border-radius: 30px;
+            border-radius: 10px; /* Increased from 6px to 10px */
             font-size: 1rem;
             font-family: 'Poppins', sans-serif;
             font-weight: 500;
@@ -166,7 +150,7 @@
             color: white;
             border: none;
             padding: 18px 35px;
-            border-radius: 30px;
+            border-radius: 10px; /* Increased from 6px to 10px */
             font-size: 1rem;
             font-weight: 800;
             font-family: 'Poppins', sans-serif;
@@ -195,28 +179,72 @@
             font-weight: 600;
         }
 
-        .example-questions {
-            margin-top: 25px;
+        /* Instructions moved outside chat container */
+        .instructions {
+            font-size: 0.9rem; /* Smaller text */
+            color: #666;
             text-align: center;
+            margin-bottom: 15px;
+            line-height: 1.4;
+            font-weight: 400;
+        }
+
+        .chat-container {
+            background: #fafafa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 0;
+            min-height: 0; /* Allow flexibility */
+            flex: 1; /* Take remaining space */
+            overflow-y: auto; /* Only this scrolls */
+            border: 2px solid rgba(251, 77, 66, 0.1);
+        }
+
+        .message {
+            margin-bottom: 20px;
+            padding: 18px;
+            border-radius: 10px; /* Increased from 6px to 10px */
+            max-width: 85%;
+            font-weight: 500;
+        }
+
+        .user-message {
+            background: linear-gradient(135deg, #FB4d42 0%, #ff6b5a 100%);
+            color: white;
+            margin-left: auto;
+            font-weight: 600;
+        }
+
+        .assistant-message {
+            background: #f0f0f0;
+            color: #333;
+            margin-right: auto;
+            border-left: 4px solid #FB4d42;
+        }
+
+        .example-questions {
+            margin-top: 8px; /* Minimal space */
+            text-align: center;
+            flex-shrink: 0;
         }
 
         .example-questions h3 {
             color: #555;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
+            margin-bottom: 8px; /* Very compact */
+            font-size: 0.9rem; /* Smaller */
             font-weight: 700;
         }
 
         .example-button {
             display: inline-block;
-            margin: 8px;
-            padding: 12px 20px;
+            margin: 4px; /* Reduced margins */
+            padding: 8px 16px; /* Smaller padding */
             background: rgba(251, 77, 66, 0.1);
             color: #FB4d42;
             border: 2px solid rgba(251, 77, 66, 0.3);
-            border-radius: 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.8rem; /* Smaller text */
             font-weight: 700;
             font-family: 'Poppins', sans-serif;
             transition: all 0.3s ease;
@@ -278,11 +306,16 @@
 
         <div class="location-section">
             <button class="location-button" id="locationButton" onclick="findMyCouncilor()">
-                📍 Find My City Councilor
+                📍 Who's my City Councilor
             </button>
             <div class="location-status" id="locationStatus">
                 <!-- Hidden by default, will show when location is detected -->
             </div>
+        </div>
+
+        <!-- Instructions moved outside chat container with smaller text -->
+        <div class="instructions">
+            Hello! I'm your Boston Pol Finder. I can help you find information about elected officials in Boston. Try clicking "Who's my City Councilor" to automatically find your representative, or ask me about any Boston official!
         </div>
 
         <div class="chat-container" id="chatContainer">
@@ -373,7 +406,7 @@
                         locationStatus.style.display = "block";
                         locationStatus.textContent = "You don't appear to be in Boston. Try asking about a specific neighborhood.";
                         locationButton.disabled = false;
-                        locationButton.textContent = "📍 Find My City Councilor";
+                        locationButton.textContent = "📍 Who's my City Councilor";
                         return;
                     }
 
@@ -388,7 +421,7 @@
                     await sendMessage();
                     
                     locationButton.disabled = false;
-                    locationButton.textContent = "📍 Find My City Councilor";
+                    locationButton.textContent = "📍 Who's my City Councilor";
                 },
                 (error) => {
                     let errorMessage = "Unable to get your location";
@@ -406,7 +439,7 @@
                     locationStatus.style.display = "block";
                     locationStatus.textContent = errorMessage;
                     locationButton.disabled = false;
-                    locationButton.textContent = "📍 Find My City Councilor";
+                    locationButton.textContent = "📍 Who's my City Councilor";
                 }
             );
         }
@@ -479,10 +512,7 @@
         // Focus on input when page loads
         userInput.focus();
 
-        // Add a welcome message
-        setTimeout(() => {
-            addMessage("Hello! I'm your Boston Pol Finder. I can help you find information about elected officials in Boston. Try clicking 'Find My City Councilor' to automatically find your representative, or ask me about any Boston official!");
-        }, 500);
+        // No welcome message automatically added - instructions are now outside chat
     </script>
 </body>
 </html>
