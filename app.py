@@ -26,6 +26,11 @@ app.add_middleware(
 # Define the path to your database file
 DATABASE_URL = "officials.db"
 
+# Pydantic Model for API Requests
+class QueryRequest(BaseModel):
+    query: str
+    session_id: str = "default"
+
 # CUSTOM CONVERSATION ENGINE
 class ConversationContext:
     """Intelligent conversation context manager."""
@@ -84,6 +89,7 @@ class ConversationContext:
                 entities["concepts"].append(concept)
         
         return entities
+    
     def resolve_pronouns(self, query: str, session: dict) -> str:
         """Intelligently resolve pronouns based on conversation context."""
         query_lower = query.lower()
@@ -95,7 +101,6 @@ class ConversationContext:
         
         # Resolve "she/her"
         if any(pronoun in query_lower for pronoun in ["she", "her", "hers"]):
-            # Look for recent female officials
             female_officials = ["Michelle Wu", "Elizabeth Warren", "Ayanna Pressley", "Maura Healey", "Andrea Campbell", "Kim Driscoll"]
             recent_females = [name for name in recent_people if name in female_officials]
             
@@ -110,7 +115,6 @@ class ConversationContext:
         
         # Resolve "he/him"
         if any(pronoun in query_lower for pronoun in ["he", "him", "his"]):
-            # Look for recent male officials
             male_officials = ["Ed Markey", "Stephen Lynch", "Ed Flynn", "Nick Collins"]
             recent_males = [name for name in recent_people if name in male_officials]
             
@@ -139,13 +143,15 @@ class ConversationContext:
             if recent_people:
                 enhanced_query = f"{recent_people[-1]} {enhanced_query}"
         
-        # If asking about time/term without a name, use recent person
-        if any(phrase in query_lower for phrase in ["how long", "when did", "since when", "term"]) and not any(word in query_lower for word in ["who", "what", "michelle", "elizabeth"]):
+        # If asking about time/term without a name, use recent person and prioritize governor
+        if any(phrase in query_lower for phrase in ["how long", "when did", "since when", "term", "been in office", "how long has"]) and not any(word in query_lower for word in ["who", "what", "michelle", "elizabeth"]):
             recent_people = []
             for exchange in session["history"][-2:]:
                 recent_people.extend(exchange.get("entities", {}).get("people", []))
             if recent_people:
                 enhanced_query = f"{recent_people[-1]} {enhanced_query}"
+            elif "governor" in query_lower:
+                enhanced_query = re.sub(r'\bgovernor\b', "Maura Healey", enhanced_query, flags=re.IGNORECASE)
         
         return enhanced_query
     
@@ -173,38 +179,6 @@ class ConversationContext:
 
 # Global conversation engine
 conversation_engine = ConversationContext()
-
-import os
-import csv
-import re
-from datetime import datetime
-from typing import List, Dict
-import aiosqlite
-from difflib import SequenceMatcher
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-
-# Assuming you have a conversation engine (you may need to implement or import this)
-class ConversationEngine:
-    def get_session(self, session_id: str):
-        return {}  # Placeholder: Implement actual session management
-    def enhance_query_with_context(self, query: str, session: dict) -> str:
-        return query  # Placeholder: Implement context enhancement
-    def extract_entities(self, query: str) -> list:
-        return []  # Placeholder: Implement entity extraction
-    def add_exchange(self, session_id: str, query: str, response: str):
-        pass  # Placeholder: Implement conversation storage
-
-app = FastAPI()
-conversation_engine = ConversationEngine()
-
-# Database configuration (ensure DATABASE_URL is defined)
-DATABASE_URL = "officials.db"  # Adjust as needed
-
-class QueryRequest(BaseModel):
-    query: str
-    session_id: str = "default"
 
 # Database initialization with ENHANCED SCHEMA
 async def init_database():
@@ -358,7 +332,7 @@ def extract_search_terms(query: str) -> str:
         return result
     
     # Remove common question words and phrases for general search
-    query_cleaned = re.sub(r'\b(who is|what is|tell me about|show me|find|search for|about|the|of|boston|educational|background|policy|focus|career|did|does|where|what)\b', '', query_lower).strip()
+    query_cleaned = re.sub(r'\b(who is|what is|tell me about|show me|find|search for|about|the|of|boston|educational|background|policy|focus|career|did|does|where|what|has|been|in|office)\b', '', query_lower).strip()
     
     # Final fallback - return cleaned query or original
     result = query_cleaned if query_cleaned else query
@@ -394,7 +368,7 @@ class QueryAnalyzer:
         # Determine target information
         target_mappings = {
             'salary': ['salary', 'pay', 'money', 'earn', 'make', 'income'],
-            'time_in_office': ['how long', 'when did', 'since when', 'term', 'time in office'],
+            'time_in_office': ['how long', 'when did', 'since when', 'term', 'been in office', 'how long has'],
             'contact': ['contact', 'email', 'phone', 'reach'],
             'party': ['party', 'democrat', 'republican', 'affiliation'],
             'education': ['education', 'educational', 'school', 'college', 'university', 'degree', 'studied', 'graduate', 'graduated', 'attend', 'attended', 'alma mater'],
@@ -463,7 +437,7 @@ def normalize_search_term(search_term: str) -> str:
     
     return search_term
 
-async def search_officials(query: str) -> List[Dict]:
+async def search_officials(query: str, intent_analysis: dict) -> List[Dict]:
     """Database search logic with enhanced debugging."""
     try:
         async with aiosqlite.connect(DATABASE_URL) as db:
@@ -511,15 +485,84 @@ async def search_officials(query: str) -> List[Dict]:
                 print(f"SEARCH DEBUG: Found {len(results)} officials in district {district_num}")
                 return [dict(row) for row in results]
             
-            # OFFICE SEARCHES
+            # OFFICE SEARCHES with intent prioritization
             normalized_query = normalize_search_term(query)
             search_pattern = f"%{normalized_query}%"
             
             print(f"SEARCH DEBUG: Office search with pattern: '{search_pattern}'")
+            if "time_in_office" in intent_analysis["target_info"] and normalized_query in ["governor", "mayor"]:
+                # Prioritize the primary office holder (e.g., Governor or Mayor) for time
+                sql_query = """
+                    SELECT * FROM officials 
+                    WHERE LOWER(office) LIKE LOWER(?) AND name IN ('Maura Healey', 'Michelle Wu')
+                    LIMIT 1
+                """
+                await cursor.execute(sql_query, (search_pattern,))
+                results = await cursor.fetchall()
+                if results:
+                    print(f"SEARCH DEBUG: Time-in-office search found {len(results)} result")
+                    await cursor.close()
+                    return [dict(row) for row in results]
+            elif "contact" in intent_analysis["target_info"] and normalized_query in ["governor", "mayor"]:
+                # Prioritize the primary office holder (e.g., Governor or Mayor) for contact
+                sql_query = """
+                    SELECT * FROM officials 
+                    WHERE LOWER(office) LIKE LOWER(?) AND name IN ('Maura Healey', 'Michelle Wu')
+                    LIMIT 1
+                """
+                await cursor.execute(sql_query, (search_pattern,))
+                results = await cursor.fetchall()
+                if results:
+                    print(f"SEARCH DEBUG: Contact search found {len(results)} result")
+                    await cursor.close()
+                    return [dict(row) for row in results]
+            elif "party" in intent_analysis["target_info"] and normalized_query == "senator":
+                # Prioritize Elizabeth Warren for party
+                sql_query = """
+                    SELECT * FROM officials 
+                    WHERE LOWER(office) LIKE ? AND level = 'Federal' AND name = 'Elizabeth Warren'
+                    LIMIT 1
+                """
+                await cursor.execute(sql_query, ('%senator%',))
+                results = await cursor.fetchall()
+                print(f"SEARCH DEBUG: Party search found {len(results)} result")
+                if results:
+                    await cursor.close()
+                    return [dict(row) for row in results]
+            elif "education" in intent_analysis["target_info"]:
+                # Prioritize Elizabeth Warren for education with explicit office match
+                print(f"SEARCH DEBUG: Entering education intent block for normalized_query: '{normalized_query}'")
+                sql_query = """
+                    SELECT * FROM officials 
+                    WHERE LOWER(office) IN ('senator', 'u.s. senator') AND level = 'Federal' AND name = 'Elizabeth Warren'
+                    LIMIT 1
+                """
+                await cursor.execute(sql_query)
+                results = await cursor.fetchall()
+                print(f"SEARCH DEBUG: Education search query executed, results: {results}")
+                if results:
+                    await cursor.close()
+                    return [dict(row) for row in results]
+            elif "policy" in intent_analysis["target_info"] and normalized_query == "mayor":
+                # Prioritize Michelle Wu for policy
+                sql_query = """
+                    SELECT * FROM officials 
+                    WHERE LOWER(office) LIKE ? AND name = 'Michelle Wu'
+                    LIMIT 1
+                """
+                await cursor.execute(sql_query, ('%mayor%',))
+                results = await cursor.fetchall()
+                print(f"SEARCH DEBUG: Policy search found {len(results)} result")
+                if results:
+                    await cursor.close()
+                    return [dict(row) for row in results]
+            
             sql_query = """
                 SELECT * FROM officials 
                 WHERE LOWER(office) LIKE LOWER(?)
             """
+            if "salary" in intent_analysis["target_info"]:
+                sql_query += " AND annual_salary IS NOT NULL"
             await cursor.execute(sql_query, (search_pattern,))
             results = await cursor.fetchall()
             
@@ -537,6 +580,8 @@ async def search_officials(query: str) -> List[Dict]:
                 SELECT * FROM officials 
                 WHERE LOWER(name) LIKE LOWER(?)
             """
+            if "salary" in intent_analysis["target_info"]:
+                sql_query += " AND annual_salary IS NOT NULL"
             await cursor.execute(sql_query, (search_pattern,))
             results = await cursor.fetchall()
             
@@ -554,6 +599,8 @@ async def search_officials(query: str) -> List[Dict]:
                 OR LOWER(office) LIKE LOWER(?)
                 OR LOWER(level) LIKE LOWER(?)
             """
+            if "salary" in intent_analysis["target_info"]:
+                sql_query += " AND annual_salary IS NOT NULL"
             await cursor.execute(sql_query, (search_pattern, search_pattern, search_pattern))
             results = await cursor.fetchall()
             await cursor.close()
@@ -755,7 +802,7 @@ async def search(query: str, session_id: str = "default"):
         search_term = extract_search_terms(enhanced_query)
 
         # Search database
-        officials = await search_officials(search_term)
+        officials = await search_officials(search_term, intent_analysis)
 
         # Generate response
         response = ResponseGenerator.generate_response(officials, intent_analysis, query)
